@@ -183,11 +183,13 @@ if __name__ == '__main__':
     if torch.cuda.device_count() > 1:
         dist.init_process_group(backend="nccl")
         print("Distributed initialized with NCCL")
+        rank = dist.get_rank()
     else:
         print("Single GPU detected — skipping distributed initialization")
+        rank = 0
     # dist.init_process_group(backend="nccl")
     torch.cuda.set_device(args.local_rank)
-    rank = dist.get_rank()
+    # rank = dist.get_rank()
     init_seeds(seed=rank)
 
     # Logger init
@@ -197,4 +199,6 @@ if __name__ == '__main__':
     validation(local_rank=args.local_rank, d_configs=d_configs, p_configs=p_configs)
 
     # Tear down the process group
-    dist.destroy_process_group()
+    # dist.destroy_process_group()
+    if torch.cuda.device_count() > 1:
+        dist.destroy_process_group()
