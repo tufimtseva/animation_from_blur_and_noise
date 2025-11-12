@@ -8,6 +8,7 @@ import matplotlib.pyplot as plt
 from torch.utils.data import Dataset
 from os.path import join, exists, basename
 import warnings
+import cv2 as cv
 
 try:
     import augment as A
@@ -317,12 +318,13 @@ class GenBlur(Dataset):
     """
 
     def __init__(self, set_type, root_dir, suffix, num_gts, num_fut, num_past, video_list, aug_args, use_trend=False,
-                 temporal_step=1, trend_type='trend+', check_trend=False, use_flow=False, flow_type='flow'):
+                 temporal_step=1, trend_type='trend+', check_trend=False, use_flow=False, flow_type='flow', noisy=False):
         self.use_trend = use_trend
         self.trend_type = trend_type
         self.check_trend = check_trend
         self.use_flow = use_flow
         self.flow_type = flow_type
+        self.noisy = noisy
         self.img_transform, self.vid_transform = self.gen_transform(aug_args[set_type])
         assert isinstance(root_dir, list) and isinstance(video_list, dict)
         self.samples = []
@@ -545,6 +547,9 @@ class GenBlur(Dataset):
         # tensor = self.check_trend_ratio(tensor, verbose=True)
         tensor = self.replay_image_aug(tensor, self.img_transform)
         tensor = self.replay_video_aug(tensor, self.vid_transform)
+        if self.noisy:
+            tensor['inp'] = [cv.GaussianBlur(img, (11, 11), 0) for img in
+                             tensor['inp']]
         tensor['inp'] = torch.from_numpy(np.stack(tensor['inp'], axis=0).transpose((0, 3, 1, 2))).float()
         tensor['gt'] = torch.from_numpy(np.stack(tensor['gt'], axis=0).transpose((0, 3, 1, 2))).float()
         if self.use_trend:
