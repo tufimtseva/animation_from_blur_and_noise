@@ -180,7 +180,12 @@ if __name__ == '__main__':
     d_configs['dataset_args']['use_trend'] = False
 
     # DDP init
-    dist.init_process_group(backend="nccl")
+    if torch.cuda.device_count() > 1:
+        dist.init_process_group(backend="nccl")
+        print("Distributed initialized with NCCL")
+    else:
+        print("Single GPU detected — skipping distributed initialization")
+    # dist.init_process_group(backend="nccl")
     torch.cuda.set_device(args.local_rank)
     rank = dist.get_rank()
     init_seeds(seed=rank)
