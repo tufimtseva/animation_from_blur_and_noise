@@ -22,7 +22,7 @@ import torchvision.utils as vutils
 
 import os
 
-SAVE_DIR = "u/tufimtseva/Animation-from-Blur/reconstruction_results"
+SAVE_DIR = "reconstruction_results"
 os.makedirs(SAVE_DIR, exist_ok=True)
 
 
@@ -89,6 +89,8 @@ def evaluate(d_model, p_model, valid_loader, local_rank, num_sampling, logger, s
             out_tensor = d_model.update(inp_tensor=tensor, training=False)
             pred_imgs = out_tensor['pred_imgs']  # pred_imgs shape (b, num_gts, 3, h, w)
             gt_imgs = out_tensor['gt_imgs']  # gt_imgs shape (b, num_gts, 3, h, w)
+            pred_imgs = pred_imgs.reshape(num_gts * b, c, h, w)
+
 
             if i < 5:
                 # pred_imgs has shape (num_gts * b, 3, H, W)
