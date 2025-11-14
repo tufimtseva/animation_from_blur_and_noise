@@ -548,7 +548,12 @@ class GenBlur(Dataset):
         tensor = self.replay_image_aug(tensor, self.img_transform)
         tensor = self.replay_video_aug(tensor, self.vid_transform)
         if self.noisy:
-            tensor['inp'] = [cv.GaussianBlur(img, (11, 11), 0) for img in
+            ks = min(tensor['inp'][0].shape[0] - 1,
+                     tensor['inp'][0].shape[1] - 1)
+            if ks % 2 == 0:
+                ks -= 1
+
+            tensor['inp'] = [cv.GaussianBlur(img, (ks, ks), 0) for img in
                              tensor['inp']]
         tensor['inp'] = torch.from_numpy(np.stack(tensor['inp'], axis=0).transpose((0, 3, 1, 2))).float()
         tensor['gt'] = torch.from_numpy(np.stack(tensor['gt'], axis=0).transpose((0, 3, 1, 2))).float()
