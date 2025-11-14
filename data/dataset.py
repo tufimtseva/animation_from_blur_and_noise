@@ -258,10 +258,12 @@ class BAistPP(Dataset):
         tensor = self.replay_image_aug(tensor, self.img_transform)
         tensor = self.replay_video_aug(tensor, self.vid_transform)
         if self.noisy:
-            ks = min(tensor['inp'][0].shape[0] - 1,
-                     tensor['inp'][0].shape[1] - 1)
-            if ks % 2 == 0:
-                ks -= 1
+            # ks = min(tensor['inp'][0].shape[0] - 1,
+            #          tensor['inp'][0].shape[1] - 1)
+            # if ks % 2 == 0:
+            #     ks -= 1
+
+            ks = 11
 
             tensor['inp'] = [cv.GaussianBlur(img, (ks, ks), 0) for img in
                              tensor['inp']]
