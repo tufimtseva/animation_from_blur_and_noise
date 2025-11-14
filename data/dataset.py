@@ -261,7 +261,7 @@ class BAistPP(Dataset):
         tensor = self.replay_image_aug(tensor, self.img_transform)
         tensor = self.replay_video_aug(tensor, self.vid_transform)
         if self.noisy:
-            sigma = 0.5
+            sigma = 20
             inp = [torch.from_numpy(img).float() for img in tensor['inp']]
             tensor['inp'] = [self.add_noise(img, sigma) for img in inp]
         tensor['inp'] = torch.from_numpy(np.stack(tensor['inp'], axis=0).transpose((0, 3, 1, 2))).float()
