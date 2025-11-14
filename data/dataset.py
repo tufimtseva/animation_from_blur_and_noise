@@ -241,7 +241,7 @@ class BAistPP(Dataset):
             tensor['flow'] = transform(images=tensor['flow'], replay_args=replay_args, flow=True)['images']
         return tensor
 
-    def add_noise(x, sigma=0.1):
+    def add_noise(self, x, sigma=0.1):
         return x + torch.randn_like(x) * sigma
 
     def __getitem__(self, idx):
@@ -262,13 +262,6 @@ class BAistPP(Dataset):
         tensor = self.replay_video_aug(tensor, self.vid_transform)
         if self.noisy:
             sigma = 0.5
-            # ks = min(tensor['inp'][0].shape[0] - 1,
-            #          tensor['inp'][0].shape[1] - 1)
-            # if ks % 2 == 0:
-            #     ks -= 1
-
-            # ks = 3
-
             tensor['inp'] = [self.add_noise(img, sigma) for img in
                              tensor['inp']]
         tensor['inp'] = torch.from_numpy(np.stack(tensor['inp'], axis=0).transpose((0, 3, 1, 2))).float()
