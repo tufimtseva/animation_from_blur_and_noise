@@ -16,7 +16,7 @@ from logger import Logger
 from model.bicyclegan.global_model import GuidePredictor as GP
 from tqdm import tqdm
 from torch.distributed.elastic.multiprocessing.errors import record
-
+from data.dataset import BAistPP as BDDataset
 loss_fn_alex = lpips.LPIPS(net='alex').to('cuda:0')
 
 
@@ -167,12 +167,12 @@ def main():
     for root_dir in d_configs['dataset_args']['root_dir']:
         if 'b-aist++' in root_dir:
             is_gen_blur = False
-    if is_gen_blur:
-        from data.dataset import GenBlur as BDDataset
+    # if is_gen_blur:
+    #     from data.dataset import GenBlur as BDDataset
+    #
+    #     d_configs['dataset_args']['aug_args']['valid']['image'] = {}
+    # else:
 
-        d_configs['dataset_args']['aug_args']['valid']['image'] = {}
-    else:
-        from data.dataset import BAistPP as BDDataset
 
         d_configs['dataset_args']['aug_args']['valid']['image'] = {
             'NearBBoxResizedSafeCrop': {'max_ratio': 0, 'height': 192, 'width': 160}
