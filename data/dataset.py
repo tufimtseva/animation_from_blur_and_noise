@@ -263,7 +263,7 @@ class BAistPP(Dataset):
             # if ks % 2 == 0:
             #     ks -= 1
 
-            ks = 5
+            ks = 3
 
             tensor['inp'] = [cv.GaussianBlur(img, (ks, ks), 0) for img in
                              tensor['inp']]
