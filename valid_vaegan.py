@@ -18,6 +18,12 @@ from tqdm import tqdm
 from torch.distributed.elastic.multiprocessing.errors import record
 from data.dataset import BAistPP as BDDataset
 loss_fn_alex = lpips.LPIPS(net='alex').to('cuda:0')
+import torchvision.utils as vutils
+
+import os
+
+SAVE_DIR = "u/tufimtseva/Animation-from-Blur/reconstruction_results"
+os.makedirs(SAVE_DIR, exist_ok=True)
 
 
 def init_seeds(seed=0):
@@ -42,11 +48,11 @@ def validation(local_rank, d_configs, p_configs, num_sampling, logger):
                               batch_size=1,
                               num_workers=d_configs['num_workers'],
                               pin_memory=True)
-    evaluate(d_model, p_model, valid_loader, local_rank, num_sampling, logger)
+    evaluate(d_model, p_model, valid_loader, local_rank, num_sampling, logger, valid_dataset.sigma)
 
 
 @torch.no_grad()
-def evaluate(d_model, p_model, valid_loader, local_rank, num_sampling, logger):
+def evaluate(d_model, p_model, valid_loader, local_rank, num_sampling, logger, sigma):
     # Preparation
     torch.cuda.empty_cache()
     device = torch.device("cuda", local_rank)
@@ -83,6 +89,15 @@ def evaluate(d_model, p_model, valid_loader, local_rank, num_sampling, logger):
             out_tensor = d_model.update(inp_tensor=tensor, training=False)
             pred_imgs = out_tensor['pred_imgs']  # pred_imgs shape (b, num_gts, 3, h, w)
             gt_imgs = out_tensor['gt_imgs']  # gt_imgs shape (b, num_gts, 3, h, w)
+
+            if i < 5:
+                # pred_imgs has shape (num_gts * b, 3, H, W)
+                for j in range(pred_imgs.shape[0]):
+                    save_path = os.path.join(SAVE_DIR, f"sigma_{sigma}seq{i}_sample{j}.png")
+                    # bring back to 0–1
+                    img = pred_imgs[j]
+                           # .clamp(0, 255) / 255.0
+                    vutils.save_image(img, save_path)
 
             # Record loss and metrics
             pred_imgs = pred_imgs.to(device)

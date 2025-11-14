@@ -36,6 +36,7 @@ class BAistPP(Dataset):
         self.use_trend = use_trend
         self.use_flow = use_flow
         self.noisy = noisy
+        self.sigma = 10
         self.img_transform, self.vid_transform = self.gen_transform(aug_args[set_type])
         assert isinstance(root_dir, list) and isinstance(video_list, dict)
         self.samples = []
@@ -261,9 +262,9 @@ class BAistPP(Dataset):
         tensor = self.replay_image_aug(tensor, self.img_transform)
         tensor = self.replay_video_aug(tensor, self.vid_transform)
         if self.noisy:
-            sigma = 5
+
             inp = [torch.from_numpy(img).float() for img in tensor['inp']]
-            tensor['inp'] = [self.add_noise(img, sigma) for img in inp]
+            tensor['inp'] = [self.add_noise(img, self.sigma) for img in inp]
         tensor['inp'] = torch.from_numpy(np.stack(tensor['inp'], axis=0).transpose((0, 3, 1, 2))).float()
         tensor['gt'] = torch.from_numpy(np.stack(tensor['gt'], axis=0).transpose((0, 3, 1, 2))).float()
         if self.use_trend:
