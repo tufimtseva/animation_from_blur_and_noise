@@ -27,7 +27,7 @@ def init_seeds(seed=0):
     torch.cuda.manual_seed_all(seed)
 
 
-def validation(local_rank, d_configs, p_configs):
+def validation(local_rank, d_configs, p_configs, num_sampling, logger):
     # Preparation and backup
     torch.backends.cudnn.benchmark = True
 
@@ -42,11 +42,11 @@ def validation(local_rank, d_configs, p_configs):
                               batch_size=1,
                               num_workers=d_configs['num_workers'],
                               pin_memory=True)
-    evaluate(d_model, p_model, valid_loader, local_rank)
+    evaluate(d_model, p_model, valid_loader, local_rank, num_sampling, logger)
 
 
 @torch.no_grad()
-def evaluate(d_model, p_model, valid_loader, local_rank):
+def evaluate(d_model, p_model, valid_loader, local_rank, num_sampling, logger):
     # Preparation
     torch.cuda.empty_cache()
     device = torch.device("cuda", local_rank)
@@ -197,14 +197,14 @@ def main():
     init_seeds(seed=rank)
 
     # Training model
-    validation(local_rank=args.local_rank, d_configs=d_configs, p_configs=p_configs)
+    validation(local_rank=args.local_rank, d_configs=d_configs, p_configs=p_configs, num_sampling=num_sampling, logger=logger)
 
     # Tear down the process group
     # dist.destroy_process_group()
     # if torch.cuda.device_count() > 1:
     dist.destroy_process_group()
-    return logger, num_sampling
+
 
 
 if __name__ == '__main__':
-    logger, num_sampling = main()
+    main()
