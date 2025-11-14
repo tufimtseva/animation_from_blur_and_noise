@@ -15,6 +15,7 @@ from os.path import join
 from logger import Logger
 from model.bicyclegan.global_model import GuidePredictor as GP
 from tqdm import tqdm
+from torch.distributed.elastic.multiprocessing.errors import record
 
 loss_fn_alex = lpips.LPIPS(net='alex').to('cuda:0')
 
@@ -129,8 +130,8 @@ def evaluate(d_model, p_model, valid_loader, local_rank):
     logger(msg, prefix='[valid max.]')
     logger.close()
 
-
-if __name__ == '__main__':
+@record
+def main():
     # load args & configs
     parser = ArgumentParser(description='Guidance prediction & Blur Decomposition')
     parser.add_argument('--local_rank', default=0, type=int, help='local rank')
@@ -179,6 +180,9 @@ if __name__ == '__main__':
     d_configs['dataset_args']['root_dir'] = args.data_dir
     d_configs['dataset_args']['use_trend'] = False
 
+    # Logger init
+    logger = Logger(file_path=join(args.log_dir, '{}.txt'.format(args.log_name)), verbose=args.verbose)
+
     # DDP init
     # if torch.cuda.device_count() > 1:
     #     dist.init_process_group(backend="nccl")
@@ -192,9 +196,6 @@ if __name__ == '__main__':
     rank = dist.get_rank()
     init_seeds(seed=rank)
 
-    # Logger init
-    logger = Logger(file_path=join(args.log_dir, '{}.txt'.format(args.log_name)), verbose=args.verbose)
-
     # Training model
     validation(local_rank=args.local_rank, d_configs=d_configs, p_configs=p_configs)
 
@@ -202,3 +203,8 @@ if __name__ == '__main__':
     # dist.destroy_process_group()
     # if torch.cuda.device_count() > 1:
     dist.destroy_process_group()
+    return logger, num_sampling
+
+
+if __name__ == '__main__':
+    logger, num_sampling = main()
