@@ -80,7 +80,7 @@ class BAistPP(Dataset):
             if rdir.endswith('/'):
                 rdir = rdir[:-1]
 
-            test_root = rdir  # Use the provided root_dir directly
+            test_root = "/w/20251/tufimtseva/Gopro/test"
             print(f"[DEBUG] Processing test_root: {test_root}")
 
             try:
