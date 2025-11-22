@@ -57,34 +57,33 @@ class BAistPP(Dataset):
         self.sigma = 10
         self.img_transform, self.vid_transform = self.gen_transform(
             aug_args[set_type])
+
         assert isinstance(root_dir, list)
 
         self.samples = []
 
-        # NEW: iterate through all subfolders inside each root directory
+        # iterate through Gopro/test or Gopro/train
         for rdir in root_dir:
             if rdir.endswith('/'):
                 rdir = rdir[:-1]
 
-            # list all subdirectories → actual video folders
-            for name in sorted(os.listdir(rdir)):
-                full_path = os.path.join(rdir, name)
-                if not os.path.isdir(full_path):
-                    continue  # skip files
+            # each subfolder = one video
+            for video_name in sorted(os.listdir(rdir)):
+                video_path = os.path.join(rdir, video_name)
+                if not os.path.isdir(video_path):
+                    continue
 
-                # directly treat each folder as a video
-                # no need to index into video_list
                 try:
                     self.samples += self.gen_samples(
-                        full_path,
-                        set_type=set_type,
-                        suffix=suffix,
-                        num_gts=num_gts,
-                        num_fut=num_fut,
-                        num_past=num_past
+                        self,
+                        video_path,
+                        suffix,
+                        num_gts,
+                        num_fut,
+                        num_past
                     )
                 except Exception as e:
-                    print(f"[WARN] Skipping {full_path}: {e}")
+                    print(f"[WARN] Skipping {video_path}: {e}")
 
         self.samples = self.samples[::temporal_step]
 
