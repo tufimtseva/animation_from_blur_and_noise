@@ -78,9 +78,10 @@ class BAistPP(Dataset):
                 rdir = rdir[:-1]
 
             # assume rdir is test/ folder
+            test_root = "/w/20251/tufimtseva/Gopro/test"
             try:
                 self.samples += self.gen_samples(
-                    rdir,  # root directory (test/)
+                    test_root,  # root directory (test/)
                     selected_test_videos,  # only traverse these video folders
                     suffix,
                     num_gts,
