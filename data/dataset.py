@@ -47,13 +47,72 @@ class BAistPP(Dataset):
     #         self.samples += self.gen_samples(sub_dir, sub_list[set_type], suffix, num_gts, num_fut, num_past)
     #     self.samples = self.samples[::temporal_step]
 
+    # def __init__(self, set_type, root_dir, suffix, num_gts, num_fut, num_past,
+    #              video_list=None, aug_args=None, use_trend=False,
+    #              temporal_step=1,
+    #              use_flow=False, noisy=False, **kwargs):
+    #
+    #     self.use_trend = False  # GoPro has no trend
+    #     self.use_flow = False  # GoPro has no flow
+    #     self.noisy = noisy
+    #     self.sigma = 10
+    #
+    #     self.img_transform, self.vid_transform = self.gen_transform(
+    #         aug_args[set_type]
+    #     )
+    #
+    #     assert isinstance(root_dir, list)
+    #     self.samples = []
+    #
+    #     # Hard-coded list of test video folders
+    #     selected_test_videos = [
+    #         "GOPR0384_11_00", "GOPR0385_11_01", "GOPR0410_11_00",
+    #         "GOPR0862_11_00", "GOPR0869_11_00", "GOPR0881_11_01",
+    #         "GOPR0384_11_05", "GOPR0396_11_00", "GOPR0854_11_00",
+    #         "GOPR0868_11_00", "GOPR0871_11_00"
+    #     ]
+    #
+    #     print(f"[DEBUG] root_dir input: {root_dir}")
+    #     print(f"[DEBUG] Processing {len(selected_test_videos)} test videos")
+    #
+    #     # iterate only through test folders
+    #     for rdir in root_dir:
+    #         if rdir.endswith('/'):
+    #             rdir = rdir[:-1]
+    #
+    #         test_root = "/w/20251/tufimtseva/Gopro/test"
+    #         print(f"[DEBUG] Processing test_root: {test_root}")
+    #
+    #         try:
+    #             new_samples = self.gen_samples_gopro(
+    #                 test_root,
+    #                 selected_test_videos,
+    #                 suffix,
+    #                 num_gts,
+    #                 num_fut,
+    #                 num_past
+    #             )
+    #             print(
+    #                 f"[DEBUG] gen_samples returned {len(new_samples)} samples")
+    #             self.samples += new_samples
+    #         except Exception as e:
+    #             print(f"[WARN] Skipping {rdir}: {e}")
+    #             import traceback
+    #             traceback.print_exc()
+    #
+    #     print(
+    #         f"[DEBUG] Total samples before temporal step: {len(self.samples)}")
+    #     # temporal subsampling
+    #     self.samples = self.samples[::temporal_step]
+    #     print(f"[DEBUG] Total samples after temporal step: {len(self.samples)}")
+
     def __init__(self, set_type, root_dir, suffix, num_gts, num_fut, num_past,
                  video_list=None, aug_args=None, use_trend=False,
                  temporal_step=1,
                  use_flow=False, noisy=False, **kwargs):
 
-        self.use_trend = False  # GoPro has no trend
-        self.use_flow = False  # GoPro has no flow
+        self.use_trend = False
+        self.use_flow = False
         self.noisy = noisy
         self.sigma = 10
 
@@ -64,7 +123,6 @@ class BAistPP(Dataset):
         assert isinstance(root_dir, list)
         self.samples = []
 
-        # Hard-coded list of test video folders
         selected_test_videos = [
             "GOPR0384_11_00", "GOPR0385_11_01", "GOPR0410_11_00",
             "GOPR0862_11_00", "GOPR0869_11_00", "GOPR0881_11_01",
@@ -72,16 +130,11 @@ class BAistPP(Dataset):
             "GOPR0868_11_00", "GOPR0871_11_00"
         ]
 
-        print(f"[DEBUG] root_dir input: {root_dir}")
-        print(f"[DEBUG] Processing {len(selected_test_videos)} test videos")
-
-        # iterate only through test folders
         for rdir in root_dir:
             if rdir.endswith('/'):
                 rdir = rdir[:-1]
 
-            test_root = "/w/20251/tufimtseva/Gopro/test"
-            print(f"[DEBUG] Processing test_root: {test_root}")
+            test_root = rdir + '/test'  # FIX: Append /test here
 
             try:
                 new_samples = self.gen_samples_gopro(
@@ -92,19 +145,14 @@ class BAistPP(Dataset):
                     num_fut,
                     num_past
                 )
-                print(
-                    f"[DEBUG] gen_samples returned {len(new_samples)} samples")
                 self.samples += new_samples
             except Exception as e:
-                print(f"[WARN] Skipping {rdir}: {e}")
+                print(f"[ERROR] {e}")
                 import traceback
                 traceback.print_exc()
 
-        print(
-            f"[DEBUG] Total samples before temporal step: {len(self.samples)}")
-        # temporal subsampling
         self.samples = self.samples[::temporal_step]
-        print(f"[DEBUG] Total samples after temporal step: {len(self.samples)}")
+        print(f"[INFO] Loaded {len(self.samples)} samples")
 
     def gen_transform(self, aug_args):
         """
