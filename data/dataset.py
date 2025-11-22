@@ -171,8 +171,8 @@ class BAistPP(Dataset):
         video_dirs = video_list if isinstance(video_list, list) else [
             video_list]
 
-        inp_fmt = '{:08d}.' + suffix
-        gt_fmt = '{:08d}.' + suffix
+        inp_fmt = '{:06d}.' + suffix
+        gt_fmt = '{:06d}.' + suffix
 
         print(f"[DEBUG] gen_samples_gopro called with root_dir={root_dir}")
         print(f"[DEBUG] video_dirs={video_dirs}")
