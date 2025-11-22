@@ -45,7 +45,7 @@ def validation(local_rank, d_configs, p_configs, num_sampling, logger):
     dataset_args = d_configs['dataset_args']
 
 
-    valid_dataset = BDDataset(set_type='valid', noisy=True, noise_level=5, **dataset_args)
+    valid_dataset = BDDataset(set_type='valid', noisy=False, noise_level=0, **dataset_args)
     valid_loader = DataLoader(valid_dataset,
                               batch_size=1,
                               num_workers=d_configs['num_workers'],
