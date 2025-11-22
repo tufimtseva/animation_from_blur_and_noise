@@ -174,12 +174,19 @@ class BAistPP(Dataset):
         inp_fmt = '{:08d}.' + suffix
         gt_fmt = '{:08d}.' + suffix
 
+        print(f"[DEBUG] gen_samples_gopro called with root_dir={root_dir}")
+        print(f"[DEBUG] video_dirs={video_dirs}")
+
         for vid_dir in video_dirs:
             inp_dir_path = join(root_dir, vid_dir, 'blur')
             gt_dir_path = join(root_dir, vid_dir, 'sharp')
 
+            print(
+                f"[DEBUG] Checking {vid_dir}: inp={inp_dir_path}, exists={os.path.exists(inp_dir_path)}")
+
             if not os.path.exists(inp_dir_path) or not os.path.exists(
                     gt_dir_path):
+                print(f"[DEBUG] SKIP - directories don't exist")
                 continue
 
             try:
@@ -188,19 +195,25 @@ class BAistPP(Dataset):
                 sharp_imgs = sorted([item for item in os.listdir(gt_dir_path) if
                                      item.endswith(suffix)])
 
+                print(
+                    f"[DEBUG] Found {len(blur_imgs)} blur, {len(sharp_imgs)} sharp")
+
                 blur_indices = sorted(
                     [int(img.split('.')[0]) for img in blur_imgs])
                 sharp_indices = sorted(
                     [int(img.split('.')[0]) for img in sharp_imgs])
-            except:
+            except Exception as e:
+                print(f"[DEBUG] EXCEPTION: {e}")
                 continue
 
             valid_indices = sorted(set(blur_indices) & set(sharp_indices))
+            print(f"[DEBUG] Valid indices: {len(valid_indices)}")
 
-            if len(valid_indices) < 81:  # Need at least 81 frames
+            if len(valid_indices) < 81:
+                print(f"[DEBUG] SKIP - not enough frames")
                 continue
 
-            # Sample every frame in the valid range, skipping first/last 40
+            count = 0
             for i in range(40, len(valid_indices) - 40):
                 frame_num = valid_indices[i]
 
@@ -213,7 +226,6 @@ class BAistPP(Dataset):
                     'video': vid_dir
                 }
 
-                # For single frame (num_past=0, num_fut=0), just use this frame
                 inp_path = join(inp_dir_path, inp_fmt.format(frame_num))
                 gt_path = join(gt_dir_path, gt_fmt.format(frame_num))
 
@@ -221,7 +233,11 @@ class BAistPP(Dataset):
                     sample['inp'].append(inp_path)
                     sample['gt'] += [gt_path] * num_gts
                     samples.append(sample)
+                    count += 1
 
+            print(f"[DEBUG] Added {count} samples from {vid_dir}")
+
+        print(f"[DEBUG] TOTAL samples: {len(samples)}")
         return samples
 
     # def gen_samples(self, root_dir, video_list, suffix, num_gts, num_fut, num_past):
