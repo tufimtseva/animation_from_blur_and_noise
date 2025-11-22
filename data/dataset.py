@@ -400,7 +400,12 @@ class BAistPP(Dataset):
         """
         Replay the same augmentation to each images in the tensor
         """
-        img, bbox = tensor['inp'][-1], tensor['inp_bbox'][-1]
+        # img, bbox = tensor['inp'][-1], tensor['inp_bbox'][-1]
+
+        img = tensor['inp'][-1]
+        bbox = tensor.get('inp_bbox', [None])[
+            -1]  # Use None if inp_bbox doesn't exist
+
         out = transform(image=img, bbox=bbox)
         tensor['inp'][-1], replay_args = out['image'], out['replay_args']
         for i, img in enumerate(tensor['inp'][:-1]):
