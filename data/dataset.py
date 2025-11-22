@@ -69,22 +69,20 @@ class BAistPP(Dataset):
             if rdir.endswith('/'):
                 rdir = rdir[:-1]
 
-            # each subfolder = one video
             for video_name in sorted(os.listdir(rdir)):
                 video_path = os.path.join(rdir, video_name)
                 if not os.path.isdir(video_path):
                     continue
 
                 try:
-                    vid_samples = self.gen_samples(
-                        root_dir=root_dir,
-                        video_list=video_path,
-                        suffix=suffix,
-                        num_gts=num_gts,
-                        num_fut=num_fut,
-                        num_past=num_past
+                    self.samples += self.gen_samples(
+                        rdir,  # root directory
+                        [video_name],  # pass video folder name as list
+                        suffix,
+                        num_gts,
+                        num_fut,
+                        num_past
                     )
-                    self.samples += vid_samples
                 except Exception as e:
                     print(f"[WARN] Skipping {video_path}: {e}")
 
