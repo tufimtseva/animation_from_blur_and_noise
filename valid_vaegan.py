@@ -19,6 +19,7 @@ from torch.distributed.elastic.multiprocessing.errors import record
 from data.dataset import BAistPP as BDDataset
 loss_fn_alex = lpips.LPIPS(net='alex').to('cuda:0')
 import torchvision.utils as vutils
+from restormer_arch import Restormer
 
 import os
 
@@ -41,6 +42,48 @@ def validation(local_rank, d_configs, p_configs, num_sampling, logger):
     d_model = MBD(local_rank=local_rank, configs=d_configs)
     p_model = GP(local_rank=local_rank, configs=p_configs)
 
+
+    print("\n" + "=" * 60)
+    print("Loading Restormer Denoiser...")
+    print("=" * 60)
+
+    try:
+        denoiser = Restormer(
+            inp_channels=3,
+            out_channels=3,
+            dim=48,
+            num_blocks=[4, 6, 6, 8],
+            num_refinement_blocks=4,
+            heads=[1, 2, 4, 8],
+            ffn_expansion_factor=2.66,
+            bias=False,
+            LayerNorm_type='WithBias',
+            dual_pixel_task=False
+        )
+
+        checkpoint_path = 'pretrained_models/gaussian_color_denoising_sigma25.pth'
+        checkpoint = torch.load(checkpoint_path,
+                                map_location=f'cuda:{local_rank}')
+        denoiser.load_state_dict(checkpoint['params'], strict=False)
+        denoiser = denoiser.cuda(local_rank).eval()
+
+        print(f"✅ Restormer loaded successfully!")
+        print(f"   Model path: {checkpoint_path}")
+        print(f"   Device: cuda:{local_rank}")
+
+    except FileNotFoundError:
+        print(
+            "❌ Restormer weights not found at pretrained_models/gaussian_color_denoising_sigma25.pth")
+        print(
+            "   Download: wget https://github.com/swz30/Restormer/releases/download/v1.0/gaussian_color_denoising_sigma25.pth -P pretrained_models/")
+        exit(1)
+    except Exception as e:
+        print(f"❌ Failed to load Restormer: {e}")
+        exit(1)
+
+    print("=" * 60 + "\n")
+
+
     # dataset init
     dataset_args = d_configs['dataset_args']
 
@@ -51,11 +94,11 @@ def validation(local_rank, d_configs, p_configs, num_sampling, logger):
                               num_workers=d_configs['num_workers'],
                               pin_memory=True)
 
-    evaluate(d_model, p_model, valid_loader, local_rank, num_sampling, logger, valid_dataset.sigma)
+    evaluate(d_model, p_model, valid_loader, local_rank, num_sampling, logger, valid_dataset.sigma, denoiser)
 
 
 @torch.no_grad()
-def evaluate(d_model, p_model, valid_loader, local_rank, num_sampling, logger, sigma):
+def evaluate(d_model, p_model, valid_loader, local_rank, num_sampling, logger, sigma, denoiser):
     # Preparation
     torch.cuda.empty_cache()
     device = torch.device("cuda", local_rank)
@@ -70,6 +113,40 @@ def evaluate(d_model, p_model, valid_loader, local_rank, num_sampling, logger, s
     # One epoch validation
     for i, tensor in enumerate(tqdm(valid_loader, total=len(valid_loader))):
         tensor['inp'] = tensor['inp'].to(device)  # (b, 1, 3, h, w)
+
+        blurry_input = tensor['inp'].squeeze(1)  # Remove the '1' dimension
+
+        # Check data range and normalize if needed
+        if blurry_input.max() > 1.0:
+            # Data is in [0, 255] range
+            blurry_input_normalized = blurry_input / 255.0
+            needs_denorm = True
+        else:
+            # Data is already in [0, 1] range
+            blurry_input_normalized = blurry_input
+            needs_denorm = False
+
+        # Apply Restormer denoising
+        denoised_blur = denoiser(blurry_input_normalized)
+
+        # Denormalize back to original range if needed
+        if needs_denorm:
+            denoised_blur = denoised_blur * 255.0
+
+        # Restore the expected shape: (b, 3, h, w) -> (b, 1, 3, h, w)
+        tensor['inp'] = denoised_blur.unsqueeze(1)
+
+        # Optional: Print debug info for first batch
+        if i == 0:
+            print(
+                f"\n[Denoising] Input range: [{blurry_input.min():.2f}, {blurry_input.max():.2f}]")
+            print(
+                f"[Denoising] Output range: [{denoised_blur.min():.2f}, {denoised_blur.max():.2f}]")
+            print(f"[Denoising] Normalized for denoiser: {needs_denorm}\n")
+
+
+
+
         tensor['trend'] = torch.zeros_like(tensor['inp'])[:, :, :2]
         tensor['gt'] = tensor['gt'].to(device)  # (b, num_gts, 3, h, w)
         b, num_gts, c, h, w = tensor['gt'].shape
@@ -143,11 +220,11 @@ def evaluate(d_model, p_model, valid_loader, local_rank, num_sampling, logger, s
     msg = 'eval time: {} sec, psnr: {:.5f}, ssim: {:.5f}, lpips: {:.4f}'.format(
         eval_time_interval, psnr_meter.avg, ssim_meter.avg, lpips_meter.avg
     )
-    logger(msg, prefix='[valid]')
+    logger(msg, prefix='[valid WITH RESTORMER]')  # Modified prefix to show denoising is active
     msg = 'eval time: {:.4f} sec, psnr: {:.4f}, ssim: {:.4f}, lpips: {:.4f}'.format(
         eval_time_interval, psnr_meter_better.avg, ssim_meter_better.avg, lpips_meter_better.avg
     )
-    logger(msg, prefix='[valid max.]')
+    logger(msg, prefix='[valid max. WITH RESTORMER]')  # Modified prefix
     logger.close()
 
 @record
