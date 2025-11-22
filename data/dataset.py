@@ -403,8 +403,7 @@ class BAistPP(Dataset):
         # img, bbox = tensor['inp'][-1], tensor['inp_bbox'][-1]
 
         img = tensor['inp'][-1]
-        bbox = tensor.get('inp_bbox', [None])[
-            -1]  # Use None if inp_bbox doesn't exist
+        bbox = None  # GoPro has no bboxes, just set to None
 
         out = transform(image=img, bbox=bbox)
         tensor['inp'][-1], replay_args = out['image'], out['replay_args']
