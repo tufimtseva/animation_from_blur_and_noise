@@ -109,12 +109,12 @@ class BAistPP(Dataset):
     def __init__(self, set_type, root_dir, suffix, num_gts, num_fut, num_past,
                  video_list=None, aug_args=None, use_trend=False,
                  temporal_step=1,
-                 use_flow=False, noisy=False, **kwargs):
+                 use_flow=False, noisy=False, noise_level = 10, **kwargs):
 
         self.use_trend = False
         self.use_flow = False
         self.noisy = noisy
-        self.sigma = 10
+        self.sigma = noise_level
 
         self.img_transform, self.vid_transform = self.gen_transform(
             aug_args[set_type]
