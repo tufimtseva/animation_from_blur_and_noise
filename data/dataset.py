@@ -48,11 +48,12 @@ class BAistPP(Dataset):
     #     self.samples = self.samples[::temporal_step]
 
     def __init__(self, set_type, root_dir, suffix, num_gts, num_fut, num_past,
-                 video_list, aug_args, use_trend=False, temporal_step=1,
+                 video_list=None, aug_args=None, use_trend=False,
+                 temporal_step=1,
                  use_flow=False, noisy=False, **kwargs):
 
-        self.use_trend = False  # GoPro has no trend
-        self.use_flow = False  # GoPro has no flow
+        self.use_trend = False  # GoPro test has no trend
+        self.use_flow = False  # GoPro test has no flow
         self.noisy = noisy
         self.sigma = 10
 
@@ -61,30 +62,33 @@ class BAistPP(Dataset):
         )
 
         assert isinstance(root_dir, list)
-
         self.samples = []
 
-        # iterate through GoPro/train or GoPro/test
+        # Hard-coded list of test video folders
+        selected_test_videos = [
+            "GOPR0384_11_00", "GOPR0385_11_01", "GOPR0410_11_00",
+            "GOPR0862_11_00", "GOPR0869_11_00", "GOPR0881_11_01",
+            "GOPR0384_11_05", "GOPR0396_11_00", "GOPR0854_11_00",
+            "GOPR0868_11_00", "GOPR0871_11_00"
+        ]
+
+        # iterate only through test folders
         for rdir in root_dir:
             if rdir.endswith('/'):
                 rdir = rdir[:-1]
 
-            for video_name in sorted(os.listdir(rdir)):
-                video_path = os.path.join(rdir, video_name)
-                if not os.path.isdir(video_path):
-                    continue
-
-                try:
-                    self.samples += self.gen_samples(
-                        rdir,  # root directory
-                        [video_name],  # pass video folder name as list
-                        suffix,
-                        num_gts,
-                        num_fut,
-                        num_past
-                    )
-                except Exception as e:
-                    print(f"[WARN] Skipping {video_path}: {e}")
+            # assume rdir is test/ folder
+            try:
+                self.samples += self.gen_samples(
+                    rdir,  # root directory (test/)
+                    selected_test_videos,  # only traverse these video folders
+                    suffix,
+                    num_gts,
+                    num_fut,
+                    num_past
+                )
+            except Exception as e:
+                print(f"[WARN] Skipping {rdir}: {e}")
 
         # temporal subsampling
         self.samples = self.samples[::temporal_step]
@@ -100,119 +104,40 @@ class BAistPP(Dataset):
             vid_trasnform.append(getattr(A, key.split('_')[0])(**val))
         return A.Compose(img_transform), A.ComposeV(vid_trasnform)
 
-    # def gen_samples(self, root_dir, video_list, suffix, num_gts, num_fut, num_past):
-    #     """
-    #     Returned samples is a list of dicts, a sample is represented as a dict
-    #     sample['inp'] is a list of the file paths of temporally continuous input images
-    #     sample['inp_anno'] is a list of pkl file paths, the annotations for the input images
-    #     sample['gt'] is a list of the file paths of gt images for the corresponding blurry input image
-    #     sample['gt_anno'] is a list of pkl file paths, the annotations for the gt images
-    #     sample['trend'] is a list of npy file paths, the 1/2X trend guidance
-    #     sample['video'] is the name of the video dir that the sample belongs to
-    #     """
-    #     samples = []
-    #     if isinstance(video_list, list):
-    #         video_dirs = video_list
-    #     else:
-    #         with open(video_list) as f:
-    #             video_dirs = yaml.full_load(f)
-    #     inp_fmt = '{:08d}.' + suffix
-    #     gt_fmt = '{:08d}_{:03d}.' + suffix
-    #     inp_anno_fmt = '{:08d}.pkl'
-    #     trend_fmt = '{:08d}_trend.npy'
-    #     flow_fmt = '{:08d}_flow.npy'
-    #     for vid_dir in video_dirs:
-    #         inp_dir_path = join(root_dir, vid_dir, 'blur')
-    #         inp_anno_dir_path = join(root_dir, vid_dir, 'blur_anno')
-    #         gt_dir_path = join(root_dir, vid_dir, 'sharp')
-    #         trend_dir_path = join(root_dir, vid_dir, 'trend+_avg')
-    #         # trend_dir_path = join(root_dir, vid_dir, 'trend+')
-    #         flow_dir_path = join(root_dir, vid_dir, 'flow')
-    #         try:
-    #             imgs = [item for item in os.listdir(inp_dir_path) if item.endswith(suffix)]
-    #         except:
-    #             print("missing videos:", inp_dir_path)
-    #             continue
-    #         num_imgs = len(imgs)
-    #
-    #         range_start = num_past + 40
-    #         range_stop = num_imgs - num_fut - 40
-    #         if range_start >= range_stop:
-    #             continue
-    #
-    #         for frame in range(range_start, range_stop):
-    #             sample = {}
-    #             sample['inp'], sample['gt'], sample['inp_anno'], sample['trend'], sample['flow'] = [], [], [], [], []
-    #             aban_flag = False
-    #             for i in range(frame - num_past, frame + num_fut + 1):
-    #                 # if annotation does not exist, skip this sample by setting aban_flag as True
-    #                 # collect path of input and its annotation
-    #                 inp_anno_path = join(inp_anno_dir_path, inp_anno_fmt.format(i))
-    #                 if not exists(inp_anno_path):
-    #                     aban_flag = True
-    #                     break
-    #                 sample['inp_anno'].append(inp_anno_path)
-    #                 inp_path = join(inp_dir_path, inp_fmt.format(i))
-    #                 sample['inp'].append(inp_path)
-    #                 gt_paths = [join(gt_dir_path, gt_fmt.format(i, j)) for j in range(num_gts)]
-    #                 sample['gt'] += gt_paths
-    #
-    #                 if self.use_trend:
-    #                     # collect trend guidance
-    #                     trend_path = join(trend_dir_path, trend_fmt.format(i))
-    #                     sample['trend'].append(trend_path)
-    #
-    #                 if self.use_flow:
-    #                     # collect optical flow
-    #                     flow_path = join(flow_dir_path, flow_fmt.format(i))
-    #                     sample['flow'].append(flow_path)
-    #
-    #             if aban_flag:
-    #                 continue
-    #             else:
-    #                 sample['video'] = vid_dir
-    #                 samples.append(sample)
-    #     return samples
-    def gen_samples(self, root_dir, video_list, suffix, num_gts, num_fut,
-                    num_past):
+    def gen_samples(self, root_dir, video_list, suffix, num_gts, num_fut, num_past):
         """
-        Generate samples for GoPro dataset:
-        - root_dir: path to train/ or test/ folder
-        - video_list: list of video folder names
+        Returned samples is a list of dicts, a sample is represented as a dict
+        sample['inp'] is a list of the file paths of temporally continuous input images
+        sample['inp_anno'] is a list of pkl file paths, the annotations for the input images
+        sample['gt'] is a list of the file paths of gt images for the corresponding blurry input image
+        sample['gt_anno'] is a list of pkl file paths, the annotations for the gt images
+        sample['trend'] is a list of npy file paths, the 1/2X trend guidance
+        sample['video'] is the name of the video dir that the sample belongs to
         """
         samples = []
-
-        # Always treat video_list as a list of folder names
-        video_dirs = video_list
-
+        if isinstance(video_list, list):
+            video_dirs = video_list
+        else:
+            with open(video_list) as f:
+                video_dirs = yaml.full_load(f)
         inp_fmt = '{:08d}.' + suffix
         gt_fmt = '{:08d}_{:03d}.' + suffix
-        inp_anno_fmt = '{:08d}.pkl'  # optional, may not exist in GoPro
-        # trend/flow not used for GoPro
+        inp_anno_fmt = '{:08d}.pkl'
         trend_fmt = '{:08d}_trend.npy'
         flow_fmt = '{:08d}_flow.npy'
-
         for vid_dir in video_dirs:
-            inp_dir_path = os.path.join(root_dir, vid_dir, 'blur')
-            gt_dir_path = os.path.join(root_dir, vid_dir, 'sharp')
-            inp_anno_dir_path = os.path.join(root_dir, vid_dir,
-                                             'blur_anno')  # optional
-
-            # Check that blur folder exists
-            if not os.path.exists(inp_dir_path):
-                print(f"[WARN] Missing blur folder: {inp_dir_path}")
+            inp_dir_path = join(root_dir, vid_dir, 'blur')
+            inp_anno_dir_path = join(root_dir, vid_dir, 'blur_anno')
+            gt_dir_path = join(root_dir, vid_dir, 'sharp')
+            trend_dir_path = join(root_dir, vid_dir, 'trend+_avg')
+            # trend_dir_path = join(root_dir, vid_dir, 'trend+')
+            flow_dir_path = join(root_dir, vid_dir, 'flow')
+            try:
+                imgs = [item for item in os.listdir(inp_dir_path) if item.endswith(suffix)]
+            except:
+                print("missing videos:", inp_dir_path)
                 continue
-            if not os.path.exists(gt_dir_path):
-                print(f"[WARN] Missing sharp folder: {gt_dir_path}")
-                continue
-
-            # List all images
-            imgs = sorted(
-                [f for f in os.listdir(inp_dir_path) if f.endswith(suffix)])
             num_imgs = len(imgs)
-            if num_imgs == 0:
-                print(f"[WARN] No images found in {inp_dir_path}")
-                continue
 
             range_start = num_past + 40
             range_stop = num_imgs - num_fut - 40
@@ -220,37 +145,39 @@ class BAistPP(Dataset):
                 continue
 
             for frame in range(range_start, range_stop):
-                sample = {'inp': [], 'gt': [], 'inp_anno': [], 'trend': [],
-                          'flow': []}
+                sample = {}
+                sample['inp'], sample['gt'], sample['inp_anno'], sample['trend'], sample['flow'] = [], [], [], [], []
                 aban_flag = False
-
                 for i in range(frame - num_past, frame + num_fut + 1):
-                    # Optional annotation
-                    inp_anno_path = os.path.join(inp_anno_dir_path,
-                                                 inp_anno_fmt.format(i))
-                    if os.path.exists(inp_anno_path):
-                        sample['inp_anno'].append(inp_anno_path)
-
-                    inp_path = os.path.join(inp_dir_path, inp_fmt.format(i))
-                    if not os.path.exists(inp_path):
+                    # if annotation does not exist, skip this sample by setting aban_flag as True
+                    # collect path of input and its annotation
+                    inp_anno_path = join(inp_anno_dir_path, inp_anno_fmt.format(i))
+                    if not exists(inp_anno_path):
                         aban_flag = True
                         break
+                    sample['inp_anno'].append(inp_anno_path)
+                    inp_path = join(inp_dir_path, inp_fmt.format(i))
                     sample['inp'].append(inp_path)
-
-                    gt_paths = [os.path.join(gt_dir_path, gt_fmt.format(i, j))
-                                for j in range(num_gts)]
-                    if not all(os.path.exists(p) for p in gt_paths):
-                        aban_flag = True
-                        break
+                    gt_paths = [join(gt_dir_path, gt_fmt.format(i, j)) for j in range(num_gts)]
                     sample['gt'] += gt_paths
+
+                    if self.use_trend:
+                        # collect trend guidance
+                        trend_path = join(trend_dir_path, trend_fmt.format(i))
+                        sample['trend'].append(trend_path)
+
+                    if self.use_flow:
+                        # collect optical flow
+                        flow_path = join(flow_dir_path, flow_fmt.format(i))
+                        sample['flow'].append(flow_path)
 
                 if aban_flag:
                     continue
-
-                sample['video'] = vid_dir
-                samples.append(sample)
-
+                else:
+                    sample['video'] = vid_dir
+                    samples.append(sample)
         return samples
+
 
     def check_samples(self, miss_file_list_path=None):
         miss_videos = set()
