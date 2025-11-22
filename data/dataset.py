@@ -119,13 +119,6 @@ class BAistPP(Dataset):
 
     def gen_samples_gopro(self, root_dir, video_list, suffix, num_gts, num_fut,
                           num_past):
-        """
-        Generate samples for GoPro dataset (no annotations required)
-        """
-        print(f"[DEBUG gen_samples_gopro] root_dir: {root_dir}")
-        print(
-            f"[DEBUG gen_samples_gopro] suffix: {suffix}, num_gts: {num_gts}, num_fut: {num_fut}, num_past: {num_past}")
-
         samples = []
         video_dirs = video_list if isinstance(video_list, list) else [
             video_list]
@@ -133,25 +126,12 @@ class BAistPP(Dataset):
         inp_fmt = '{:08d}.' + suffix
         gt_fmt = '{:08d}.' + suffix
 
-        print(
-            f"[DEBUG gen_samples_gopro] Processing {len(video_dirs)} video directories")
-
-        for vid_idx, vid_dir in enumerate(video_dirs):
-            print(
-                f"\n[DEBUG gen_samples_gopro] Video {vid_idx + 1}/{len(video_dirs)}: {vid_dir}")
-
+        for vid_dir in video_dirs:
             inp_dir_path = join(root_dir, vid_dir, 'blur')
             gt_dir_path = join(root_dir, vid_dir, 'sharp')
 
-            print(f"[DEBUG gen_samples_gopro] inp_dir_path: {inp_dir_path}")
-            print(f"[DEBUG gen_samples_gopro] gt_dir_path: {gt_dir_path}")
-
-            if not os.path.exists(inp_dir_path):
-                print(f"[WARN] Missing blur directory: {inp_dir_path}")
-                continue
-
-            if not os.path.exists(gt_dir_path):
-                print(f"[WARN] Missing sharp directory: {gt_dir_path}")
+            if not os.path.exists(inp_dir_path) or not os.path.exists(
+                    gt_dir_path):
                 continue
 
             try:
@@ -160,81 +140,40 @@ class BAistPP(Dataset):
                 sharp_imgs = sorted([item for item in os.listdir(gt_dir_path) if
                                      item.endswith(suffix)])
 
-                # Extract frame numbers from filenames
-                blur_indices = [int(img.split('.')[0]) for img in blur_imgs]
-                sharp_indices = [int(img.split('.')[0]) for img in sharp_imgs]
-
-                print(
-                    f"[DEBUG gen_samples_gopro] Found {len(blur_imgs)} blur images, {len(sharp_imgs)} sharp images")
-                print(
-                    f"[DEBUG gen_samples_gopro] Blur range: {min(blur_indices)} to {max(blur_indices)}")
-                print(
-                    f"[DEBUG gen_samples_gopro] Sharp range: {min(sharp_indices)} to {max(sharp_indices)}")
-
-            except Exception as e:
-                print(f"[ERROR] Failed to list directory: {e}")
+                blur_indices = sorted(
+                    [int(img.split('.')[0]) for img in blur_imgs])
+                sharp_indices = sorted(
+                    [int(img.split('.')[0]) for img in sharp_imgs])
+            except:
                 continue
 
-            # Use actual available indices instead of assuming 0-based
-            valid_indices = sorted(
-                set(blur_indices) & set(sharp_indices))  # Intersection of both
-            print(
-                f"[DEBUG gen_samples_gopro] Valid indices (present in both blur/sharp): {len(valid_indices)}")
+            valid_indices = sorted(set(blur_indices) & set(sharp_indices))
 
-            if len(valid_indices) < (
-                    num_past + num_fut + 1 + 80):  # Need enough for context + margins
-                print(f"[WARN] Not enough frames in video {vid_dir}")
+            if len(valid_indices) < 81:  # Need at least 81 frames
                 continue
 
-            # Skip first and last 40 indices for temporal context
-            valid_range = valid_indices[40 + num_past: -40 - num_fut]
-            print(
-                f"[DEBUG gen_samples_gopro] Valid sampling range: {len(valid_range)} frames")
+            # Sample every frame in the valid range, skipping first/last 40
+            for i in range(40, len(valid_indices) - 40):
+                frame_num = valid_indices[i]
 
-            sample_count_for_video = 0
+                sample = {
+                    'inp': [],
+                    'gt': [],
+                    'inp_anno': [],
+                    'trend': [],
+                    'flow': [],
+                    'video': vid_dir
+                }
 
-            for center_idx_pos in range(len(valid_range)):
-                center_frame = valid_range[center_idx_pos]
+                # For single frame (num_past=0, num_fut=0), just use this frame
+                inp_path = join(inp_dir_path, inp_fmt.format(frame_num))
+                gt_path = join(gt_dir_path, gt_fmt.format(frame_num))
 
-                sample = {}
-                sample['inp'] = []
-                sample['gt'] = []
-                sample['inp_anno'] = []
-                sample['trend'] = []
-                sample['flow'] = []
-
-                # Get the temporal window around center frame
-                start_pos = center_idx_pos - num_past + 40  # Offset by 40 to get back into valid_indices
-                end_pos = center_idx_pos + num_fut + 1 + 40
-
-                if start_pos < 0 or end_pos > len(valid_indices):
-                    continue
-
-                frame_sequence = valid_indices[start_pos:end_pos]
-
-                # Check all frames exist
-                all_exist = True
-                for frame_num in frame_sequence:
-                    inp_path = join(inp_dir_path, inp_fmt.format(frame_num))
-                    gt_path = join(gt_dir_path, gt_fmt.format(frame_num))
-
-                    if not exists(inp_path) or not exists(gt_path):
-                        all_exist = False
-                        break
-
+                if exists(inp_path) and exists(gt_path):
                     sample['inp'].append(inp_path)
                     sample['gt'] += [gt_path] * num_gts
-
-                if all_exist and len(sample['inp']) == (num_past + num_fut + 1):
-                    sample['video'] = vid_dir
                     samples.append(sample)
-                    sample_count_for_video += 1
 
-            print(
-                f"[DEBUG gen_samples_gopro] Added {sample_count_for_video} samples from video {vid_dir}")
-
-        print(
-            f"[DEBUG gen_samples_gopro] TOTAL samples generated: {len(samples)}")
         return samples
 
     # def gen_samples(self, root_dir, video_list, suffix, num_gts, num_fut, num_past):
