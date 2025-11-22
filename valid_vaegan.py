@@ -44,15 +44,14 @@ def validation(local_rank, d_configs, p_configs, num_sampling, logger):
     # dataset init
     dataset_args = d_configs['dataset_args']
 
-    noise_levels = [20, 5]
-    for n in noise_levels:
-        valid_dataset = BDDataset(set_type='valid', noisy=True, noise_level=n, **dataset_args)
-        valid_loader = DataLoader(valid_dataset,
-                                  batch_size=1,
-                                  num_workers=d_configs['num_workers'],
-                                  pin_memory=True)
 
-        evaluate(d_model, p_model, valid_loader, local_rank, num_sampling, logger, valid_dataset.sigma)
+    valid_dataset = BDDataset(set_type='valid', noisy=True, noise_level=5, **dataset_args)
+    valid_loader = DataLoader(valid_dataset,
+                              batch_size=1,
+                              num_workers=d_configs['num_workers'],
+                              pin_memory=True)
+
+    evaluate(d_model, p_model, valid_loader, local_rank, num_sampling, logger, valid_dataset.sigma)
 
 
 @torch.no_grad()
