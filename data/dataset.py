@@ -52,8 +52,8 @@ class BAistPP(Dataset):
                  temporal_step=1,
                  use_flow=False, noisy=False, **kwargs):
 
-        self.use_trend = False  # GoPro test has no trend
-        self.use_flow = False  # GoPro test has no flow
+        self.use_trend = False  # GoPro has no trend
+        self.use_flow = False  # GoPro has no flow
         self.noisy = noisy
         self.sigma = 10
 
@@ -73,23 +73,20 @@ class BAistPP(Dataset):
         ]
 
         print(f"[DEBUG] root_dir input: {root_dir}")
-        print(f"[DEBUG] selected_test_videos: {selected_test_videos}")
+        print(f"[DEBUG] Processing {len(selected_test_videos)} test videos")
 
         # iterate only through test folders
         for rdir in root_dir:
             if rdir.endswith('/'):
                 rdir = rdir[:-1]
 
-            # assume rdir is test/ folder
-            test_root = "/w/20251/tufimtseva/Gopro/test"
+            test_root = rdir  # Use the provided root_dir directly
             print(f"[DEBUG] Processing test_root: {test_root}")
-            print(
-                f"[DEBUG] Calling gen_samples with video_list: {selected_test_videos}")
 
             try:
-                new_samples = self.gen_samples(
-                    test_root,  # root directory (test/)
-                    selected_test_videos,  # only traverse these video folders
+                new_samples = self.gen_samples_gopro(
+                    test_root,
+                    selected_test_videos,
                     suffix,
                     num_gts,
                     num_fut,
@@ -109,9 +106,6 @@ class BAistPP(Dataset):
         self.samples = self.samples[::temporal_step]
         print(f"[DEBUG] Total samples after temporal step: {len(self.samples)}")
 
-        # temporal subsampling
-        self.samples = self.samples[::temporal_step]
-
     def gen_transform(self, aug_args):
         """
         Generate replay transform based on augmentation arguments in the config file
@@ -122,6 +116,118 @@ class BAistPP(Dataset):
         for key, val in aug_args['video'].items():
             vid_trasnform.append(getattr(A, key.split('_')[0])(**val))
         return A.Compose(img_transform), A.ComposeV(vid_trasnform)
+
+
+    def gen_samples_gopro(self, root_dir, video_list, suffix, num_gts, num_fut,
+                          num_past):
+        """
+        Generate samples for GoPro dataset (no annotations required)
+        sample['inp'] is a list of the file paths of temporally continuous input images
+        sample['gt'] is a list of the file paths of gt images for the corresponding blurry input image
+        sample['video'] is the name of the video dir that the sample belongs to
+        """
+        print(f"[DEBUG gen_samples_gopro] root_dir: {root_dir}")
+        print(
+            f"[DEBUG gen_samples_gopro] suffix: {suffix}, num_gts: {num_gts}, num_fut: {num_fut}, num_past: {num_past}")
+
+        samples = []
+        video_dirs = video_list if isinstance(video_list, list) else [
+            video_list]
+
+        inp_fmt = '{:08d}.' + suffix
+        gt_fmt = '{:08d}.' + suffix  # GoPro has single sharp images, not multiple
+
+        print(
+            f"[DEBUG gen_samples_gopro] Processing {len(video_dirs)} video directories")
+
+        for vid_idx, vid_dir in enumerate(video_dirs):
+            print(
+                f"\n[DEBUG gen_samples_gopro] Video {vid_idx + 1}/{len(video_dirs)}: {vid_dir}")
+
+            inp_dir_path = join(root_dir, vid_dir, 'blur')
+            gt_dir_path = join(root_dir, vid_dir, 'sharp')
+
+            print(f"[DEBUG gen_samples_gopro] inp_dir_path: {inp_dir_path}")
+            print(f"[DEBUG gen_samples_gopro] gt_dir_path: {gt_dir_path}")
+            print(
+                f"[DEBUG gen_samples_gopro] Paths exist: inp={os.path.exists(inp_dir_path)}, gt={os.path.exists(gt_dir_path)}")
+
+            if not os.path.exists(inp_dir_path):
+                print(f"[WARN] Missing blur directory: {inp_dir_path}")
+                continue
+
+            if not os.path.exists(gt_dir_path):
+                print(f"[WARN] Missing sharp directory: {gt_dir_path}")
+                continue
+
+            try:
+                blur_imgs = sorted([item for item in os.listdir(inp_dir_path) if
+                                    item.endswith(suffix)])
+                sharp_imgs = sorted([item for item in os.listdir(gt_dir_path) if
+                                     item.endswith(suffix)])
+                print(
+                    f"[DEBUG gen_samples_gopro] Found {len(blur_imgs)} blur images, {len(sharp_imgs)} sharp images")
+            except Exception as e:
+                print(f"[ERROR] Failed to list directory: {e}")
+                continue
+
+            num_imgs = len(blur_imgs)
+
+            # Calculate valid range (skip first and last 40 frames for temporal context)
+            range_start = num_past + 40
+            range_stop = num_imgs - num_fut - 40
+
+            print(
+                f"[DEBUG gen_samples_gopro] num_imgs: {num_imgs}, range_start: {range_start}, range_stop: {range_stop}")
+
+            if range_start >= range_stop:
+                print(
+                    f"[WARN] Skipping video {vid_dir}: insufficient frames (range_start >= range_stop)")
+                continue
+
+            sample_count_for_video = 0
+
+            for frame in range(range_start, range_stop):
+                sample = {}
+                sample['inp'] = []
+                sample['gt'] = []
+                sample['inp_anno'] = []  # Keep empty list for compatibility
+                sample['trend'] = []  # Keep empty list for compatibility
+                sample['flow'] = []  # Keep empty list for compatibility
+
+                # Collect temporal context: past + current + future
+                for i in range(frame - num_past, frame + num_fut + 1):
+                    inp_path = join(inp_dir_path, inp_fmt.format(i))
+
+                    # Check if input image exists
+                    if not exists(inp_path):
+                        print(f"[WARN] Missing input image: {inp_path}")
+                        break
+
+                    sample['inp'].append(inp_path)
+
+                    # For GoPro, we typically have 1 sharp image per blur
+                    # If num_gts > 1, just repeat the same sharp image
+                    gt_path = join(gt_dir_path, gt_fmt.format(i))
+                    if not exists(gt_path):
+                        print(f"[WARN] Missing GT image: {gt_path}")
+                        break
+
+                    # Add GT paths (repeat if num_gts > 1)
+                    sample['gt'] += [gt_path] * num_gts
+
+                # Only add sample if all images were found
+                if len(sample['inp']) == (num_past + num_fut + 1):
+                    sample['video'] = vid_dir
+                    samples.append(sample)
+                    sample_count_for_video += 1
+
+            print(
+                f"[DEBUG gen_samples_gopro] Added {sample_count_for_video} samples from video {vid_dir}")
+
+        print(
+            f"[DEBUG gen_samples_gopro] TOTAL samples generated: {len(samples)}")
+        return samples
 
     # def gen_samples(self, root_dir, video_list, suffix, num_gts, num_fut, num_past):
     #     """
@@ -197,120 +303,6 @@ class BAistPP(Dataset):
     #                 samples.append(sample)
     #     return samples
 
-    def gen_samples(self, root_dir, video_list, suffix, num_gts, num_fut,
-                    num_past):
-        """
-        Returned samples is a list of dicts, a sample is represented as a dict
-        sample['inp'] is a list of the file paths of temporally continuous input images
-        sample['inp_anno'] is a list of pkl file paths, the annotations for the input images
-        sample['gt'] is a list of the file paths of gt images for the corresponding blurry input image
-        sample['gt_anno'] is a list of pkl file paths, the annotations for the gt images
-        sample['trend'] is a list of npy file paths, the 1/2X trend guidance
-        sample['video'] is the name of the video dir that the sample belongs to
-        """
-        print(f"[DEBUG gen_samples] root_dir: {root_dir}")
-        print(
-            f"[DEBUG gen_samples] video_list type: {type(video_list)}, content: {video_list}")
-        print(
-            f"[DEBUG gen_samples] suffix: {suffix}, num_gts: {num_gts}, num_fut: {num_fut}, num_past: {num_past}")
-
-        samples = []
-        if isinstance(video_list, list):
-            video_dirs = video_list
-            print(f"[DEBUG gen_samples] Using video_list as-is (list)")
-        else:
-            with open(video_list) as f:
-                video_dirs = yaml.full_load(f)
-            print(f"[DEBUG gen_samples] Loaded video_dirs from yaml")
-
-        inp_fmt = '{:08d}.' + suffix
-        gt_fmt = '{:08d}_{:03d}.' + suffix
-        inp_anno_fmt = '{:08d}.pkl'
-        trend_fmt = '{:08d}_trend.npy'
-        flow_fmt = '{:08d}_flow.npy'
-
-        print(
-            f"[DEBUG gen_samples] Processing {len(video_dirs)} video directories")
-
-        for vid_idx, vid_dir in enumerate(video_dirs):
-            print(
-                f"\n[DEBUG gen_samples] Video {vid_idx + 1}/{len(video_dirs)}: {vid_dir}")
-
-            inp_dir_path = join(root_dir, vid_dir, 'blur')
-            inp_anno_dir_path = join(root_dir, vid_dir, 'blur_anno')
-            gt_dir_path = join(root_dir, vid_dir, 'sharp')
-            trend_dir_path = join(root_dir, vid_dir, 'trend+_avg')
-            flow_dir_path = join(root_dir, vid_dir, 'flow')
-
-            print(f"[DEBUG gen_samples] Checking inp_dir_path: {inp_dir_path}")
-            print(
-                f"[DEBUG gen_samples] Path exists: {os.path.exists(inp_dir_path)}")
-
-            try:
-                imgs = [item for item in os.listdir(inp_dir_path) if
-                        item.endswith(suffix)]
-                print(
-                    f"[DEBUG gen_samples] Found {len(imgs)} images with suffix '{suffix}'")
-            except Exception as e:
-                print(f"[DEBUG gen_samples] EXCEPTION listing directory: {e}")
-                print("missing videos:", inp_dir_path)
-                continue
-
-            num_imgs = len(imgs)
-            range_start = num_past + 40
-            range_stop = num_imgs - num_fut - 40
-
-            print(
-                f"[DEBUG gen_samples] num_imgs: {num_imgs}, range_start: {range_start}, range_stop: {range_stop}")
-
-            if range_start >= range_stop:
-                print(
-                    f"[DEBUG gen_samples] SKIPPING video {vid_dir}: range_start >= range_stop")
-                continue
-
-            sample_count_for_video = 0
-            for frame in range(range_start, range_stop):
-                sample = {}
-                sample['inp'], sample['gt'], sample['inp_anno'], sample[
-                    'trend'], sample['flow'] = [], [], [], [], []
-                aban_flag = False
-                for i in range(frame - num_past, frame + num_fut + 1):
-                    # if annotation does not exist, skip this sample by setting aban_flag as True
-                    # collect path of input and its annotation
-                    inp_anno_path = join(inp_anno_dir_path,
-                                         inp_anno_fmt.format(i))
-                    if not exists(inp_anno_path):
-                        aban_flag = True
-                        break
-                    sample['inp_anno'].append(inp_anno_path)
-                    inp_path = join(inp_dir_path, inp_fmt.format(i))
-                    sample['inp'].append(inp_path)
-                    gt_paths = [join(gt_dir_path, gt_fmt.format(i, j)) for j in
-                                range(num_gts)]
-                    sample['gt'] += gt_paths
-
-                    if self.use_trend:
-                        # collect trend guidance
-                        trend_path = join(trend_dir_path, trend_fmt.format(i))
-                        sample['trend'].append(trend_path)
-
-                    if self.use_flow:
-                        # collect optical flow
-                        flow_path = join(flow_dir_path, flow_fmt.format(i))
-                        sample['flow'].append(flow_path)
-
-                if aban_flag:
-                    continue
-                else:
-                    sample['video'] = vid_dir
-                    samples.append(sample)
-                    sample_count_for_video += 1
-
-            print(
-                f"[DEBUG gen_samples] Added {sample_count_for_video} samples from video {vid_dir}")
-
-        print(f"[DEBUG gen_samples] TOTAL samples generated: {len(samples)}")
-        return samples
 
     def check_samples(self, miss_file_list_path=None):
         miss_videos = set()
