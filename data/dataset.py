@@ -117,14 +117,10 @@ class BAistPP(Dataset):
             vid_trasnform.append(getattr(A, key.split('_')[0])(**val))
         return A.Compose(img_transform), A.ComposeV(vid_trasnform)
 
-
     def gen_samples_gopro(self, root_dir, video_list, suffix, num_gts, num_fut,
                           num_past):
         """
         Generate samples for GoPro dataset (no annotations required)
-        sample['inp'] is a list of the file paths of temporally continuous input images
-        sample['gt'] is a list of the file paths of gt images for the corresponding blurry input image
-        sample['video'] is the name of the video dir that the sample belongs to
         """
         print(f"[DEBUG gen_samples_gopro] root_dir: {root_dir}")
         print(
@@ -135,7 +131,7 @@ class BAistPP(Dataset):
             video_list]
 
         inp_fmt = '{:08d}.' + suffix
-        gt_fmt = '{:08d}.' + suffix  # GoPro has single sharp images, not multiple
+        gt_fmt = '{:08d}.' + suffix
 
         print(
             f"[DEBUG gen_samples_gopro] Processing {len(video_dirs)} video directories")
@@ -149,8 +145,6 @@ class BAistPP(Dataset):
 
             print(f"[DEBUG gen_samples_gopro] inp_dir_path: {inp_dir_path}")
             print(f"[DEBUG gen_samples_gopro] gt_dir_path: {gt_dir_path}")
-            print(
-                f"[DEBUG gen_samples_gopro] Paths exist: inp={os.path.exists(inp_dir_path)}, gt={os.path.exists(gt_dir_path)}")
 
             if not os.path.exists(inp_dir_path):
                 print(f"[WARN] Missing blur directory: {inp_dir_path}")
@@ -165,59 +159,73 @@ class BAistPP(Dataset):
                                     item.endswith(suffix)])
                 sharp_imgs = sorted([item for item in os.listdir(gt_dir_path) if
                                      item.endswith(suffix)])
+
+                # Extract frame numbers from filenames
+                blur_indices = [int(img.split('.')[0]) for img in blur_imgs]
+                sharp_indices = [int(img.split('.')[0]) for img in sharp_imgs]
+
                 print(
                     f"[DEBUG gen_samples_gopro] Found {len(blur_imgs)} blur images, {len(sharp_imgs)} sharp images")
+                print(
+                    f"[DEBUG gen_samples_gopro] Blur range: {min(blur_indices)} to {max(blur_indices)}")
+                print(
+                    f"[DEBUG gen_samples_gopro] Sharp range: {min(sharp_indices)} to {max(sharp_indices)}")
+
             except Exception as e:
                 print(f"[ERROR] Failed to list directory: {e}")
                 continue
 
-            num_imgs = len(blur_imgs)
-
-            # Calculate valid range (skip first and last 40 frames for temporal context)
-            range_start = num_past + 40
-            range_stop = num_imgs - num_fut - 40
-
+            # Use actual available indices instead of assuming 0-based
+            valid_indices = sorted(
+                set(blur_indices) & set(sharp_indices))  # Intersection of both
             print(
-                f"[DEBUG gen_samples_gopro] num_imgs: {num_imgs}, range_start: {range_start}, range_stop: {range_stop}")
+                f"[DEBUG gen_samples_gopro] Valid indices (present in both blur/sharp): {len(valid_indices)}")
 
-            if range_start >= range_stop:
-                print(
-                    f"[WARN] Skipping video {vid_dir}: insufficient frames (range_start >= range_stop)")
+            if len(valid_indices) < (
+                    num_past + num_fut + 1 + 80):  # Need enough for context + margins
+                print(f"[WARN] Not enough frames in video {vid_dir}")
                 continue
+
+            # Skip first and last 40 indices for temporal context
+            valid_range = valid_indices[40 + num_past: -40 - num_fut]
+            print(
+                f"[DEBUG gen_samples_gopro] Valid sampling range: {len(valid_range)} frames")
 
             sample_count_for_video = 0
 
-            for frame in range(range_start, range_stop):
+            for center_idx_pos in range(len(valid_range)):
+                center_frame = valid_range[center_idx_pos]
+
                 sample = {}
                 sample['inp'] = []
                 sample['gt'] = []
-                sample['inp_anno'] = []  # Keep empty list for compatibility
-                sample['trend'] = []  # Keep empty list for compatibility
-                sample['flow'] = []  # Keep empty list for compatibility
+                sample['inp_anno'] = []
+                sample['trend'] = []
+                sample['flow'] = []
 
-                # Collect temporal context: past + current + future
-                for i in range(frame - num_past, frame + num_fut + 1):
-                    inp_path = join(inp_dir_path, inp_fmt.format(i))
+                # Get the temporal window around center frame
+                start_pos = center_idx_pos - num_past + 40  # Offset by 40 to get back into valid_indices
+                end_pos = center_idx_pos + num_fut + 1 + 40
 
-                    # Check if input image exists
-                    if not exists(inp_path):
-                        print(f"[WARN] Missing input image: {inp_path}")
+                if start_pos < 0 or end_pos > len(valid_indices):
+                    continue
+
+                frame_sequence = valid_indices[start_pos:end_pos]
+
+                # Check all frames exist
+                all_exist = True
+                for frame_num in frame_sequence:
+                    inp_path = join(inp_dir_path, inp_fmt.format(frame_num))
+                    gt_path = join(gt_dir_path, gt_fmt.format(frame_num))
+
+                    if not exists(inp_path) or not exists(gt_path):
+                        all_exist = False
                         break
 
                     sample['inp'].append(inp_path)
-
-                    # For GoPro, we typically have 1 sharp image per blur
-                    # If num_gts > 1, just repeat the same sharp image
-                    gt_path = join(gt_dir_path, gt_fmt.format(i))
-                    if not exists(gt_path):
-                        print(f"[WARN] Missing GT image: {gt_path}")
-                        break
-
-                    # Add GT paths (repeat if num_gts > 1)
                     sample['gt'] += [gt_path] * num_gts
 
-                # Only add sample if all images were found
-                if len(sample['inp']) == (num_past + num_fut + 1):
+                if all_exist and len(sample['inp']) == (num_past + num_fut + 1):
                     sample['video'] = vid_dir
                     samples.append(sample)
                     sample_count_for_video += 1
