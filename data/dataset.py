@@ -51,18 +51,20 @@ class BAistPP(Dataset):
                  video_list, aug_args, use_trend=False, temporal_step=1,
                  use_flow=False, noisy=False, **kwargs):
 
-        self.use_trend = use_trend
-        self.use_flow = use_flow
+        self.use_trend = False  # GoPro has no trend
+        self.use_flow = False  # GoPro has no flow
         self.noisy = noisy
         self.sigma = 10
+
         self.img_transform, self.vid_transform = self.gen_transform(
-            aug_args[set_type])
+            aug_args[set_type]
+        )
 
         assert isinstance(root_dir, list)
 
         self.samples = []
 
-        # iterate through Gopro/test or Gopro/train
+        # iterate through GoPro/train or GoPro/test
         for rdir in root_dir:
             if rdir.endswith('/'):
                 rdir = rdir[:-1]
@@ -74,17 +76,19 @@ class BAistPP(Dataset):
                     continue
 
                 try:
-                    self.samples += self.gen_samples(
-                        self,
-                        video_path,
-                        suffix,
-                        num_gts,
-                        num_fut,
-                        num_past
+                    vid_samples = self.gen_samples(
+                        root_dir=root_dir,
+                        video_list=video_path,
+                        suffix=suffix,
+                        num_gts=num_gts,
+                        num_fut=num_fut,
+                        num_past=num_past
                     )
+                    self.samples += vid_samples
                 except Exception as e:
                     print(f"[WARN] Skipping {video_path}: {e}")
 
+        # temporal subsampling
         self.samples = self.samples[::temporal_step]
 
     def gen_transform(self, aug_args):
