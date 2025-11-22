@@ -31,20 +31,61 @@ class BAistPP(Dataset):
         trend: {:08d}_trend.npy (start from 00000000_trend.npy)
     """
 
-    def __init__(self, set_type, root_dir, suffix, num_gts, num_fut, num_past, video_list, aug_args, use_trend=False,
-                 temporal_step=1, use_flow=False,  noisy=False, **kwargs):
+    # def __init__(self, set_type, root_dir, suffix, num_gts, num_fut, num_past, video_list, aug_args, use_trend=False,
+    #              temporal_step=1, use_flow=False,  noisy=False, **kwargs):
+    #     self.use_trend = use_trend
+    #     self.use_flow = use_flow
+    #     self.noisy = noisy
+    #     self.sigma = 10
+    #     self.img_transform, self.vid_transform = self.gen_transform(aug_args[set_type])
+    #     assert isinstance(root_dir, list) and isinstance(video_list, dict)
+    #     self.samples = []
+    #     for sub_dir in root_dir:
+    #         if sub_dir.endswith('/'):
+    #             sub_dir = sub_dir[:-1]
+    #         sub_list = video_list[basename(sub_dir)]
+    #         self.samples += self.gen_samples(sub_dir, sub_list[set_type], suffix, num_gts, num_fut, num_past)
+    #     self.samples = self.samples[::temporal_step]
+
+    def __init__(self, set_type, root_dir, suffix, num_gts, num_fut, num_past,
+                 video_list, aug_args, use_trend=False, temporal_step=1,
+                 use_flow=False, noisy=False, **kwargs):
+
         self.use_trend = use_trend
         self.use_flow = use_flow
         self.noisy = noisy
         self.sigma = 10
-        self.img_transform, self.vid_transform = self.gen_transform(aug_args[set_type])
-        assert isinstance(root_dir, list) and isinstance(video_list, dict)
+        self.img_transform, self.vid_transform = self.gen_transform(
+            aug_args[set_type])
+        assert isinstance(root_dir, list)
+
         self.samples = []
-        for sub_dir in root_dir:
-            if sub_dir.endswith('/'):
-                sub_dir = sub_dir[:-1]
-            sub_list = video_list[basename(sub_dir)]
-            self.samples += self.gen_samples(sub_dir, sub_list[set_type], suffix, num_gts, num_fut, num_past)
+
+        # NEW: iterate through all subfolders inside each root directory
+        for rdir in root_dir:
+            if rdir.endswith('/'):
+                rdir = rdir[:-1]
+
+            # list all subdirectories → actual video folders
+            for name in sorted(os.listdir(rdir)):
+                full_path = os.path.join(rdir, name)
+                if not os.path.isdir(full_path):
+                    continue  # skip files
+
+                # directly treat each folder as a video
+                # no need to index into video_list
+                try:
+                    self.samples += self.gen_samples(
+                        full_path,
+                        set_type=set_type,
+                        suffix=suffix,
+                        num_gts=num_gts,
+                        num_fut=num_fut,
+                        num_past=num_past
+                    )
+                except Exception as e:
+                    print(f"[WARN] Skipping {full_path}: {e}")
+
         self.samples = self.samples[::temporal_step]
 
     def gen_transform(self, aug_args):
