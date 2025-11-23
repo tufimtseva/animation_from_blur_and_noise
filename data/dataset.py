@@ -189,7 +189,7 @@ class BAistPP(Dataset):
                 traceback.print_exc()
 
         self.samples = self.samples[::temporal_step]
-        print(f"[INFO] Loaded {len(self.samples)} {set_type} samples")
+        # print(f"[INFO] Loaded {len(self.samples)} {set_type} samples")
 
     def gen_transform(self, aug_args):
         """
