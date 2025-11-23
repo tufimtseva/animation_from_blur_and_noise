@@ -62,7 +62,7 @@ flow_estimator_args:
 flow_to_s2: false
 hybrid: false
 num_iterations: 1
-num_workers: 4
+num_workers: 0
 optimizer:
   lr: 0.0001
   weight_decay: 0.0001
