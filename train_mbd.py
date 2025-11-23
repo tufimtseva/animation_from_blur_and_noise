@@ -1,3 +1,6 @@
+import sys
+print("=== SCRIPT STARTING ===", flush=True)
+
 import yaml
 import random
 import torch
@@ -7,14 +10,24 @@ import numpy as np
 import torch.distributed as dist
 from datetime import datetime
 from argparse import ArgumentParser
+
+print("Basic imports done", flush=True)
+
 from data.flow_viz import trend_plus_vis
 from torch.utils.data import DataLoader
 from torch.utils.data.distributed import DistributedSampler
 from tensorboardX import SummaryWriter
+
+print("Torch/data imports done", flush=True)
+
 from model.MBD import MBD
+print("MBD imported", flush=True)
+
 from model.utils import AverageMeter
 from os.path import join
 from logger import Logger
+
+print("All imports done", flush=True)
 
 
 def init_seeds(seed=0):
@@ -25,25 +38,43 @@ def init_seeds(seed=0):
 
 
 def train(local_rank, configs, log_dir):
+    print(f"=== ENTERING TRAIN FUNCTION ===", flush=True)
+    print(f"local_rank: {local_rank}", flush=True)
+    print(f"log_dir: {log_dir}", flush=True)
+    
     # Preparation and backup
     device = torch.device("cuda", args.local_rank)
+    print(f"Device: {device}", flush=True)
+    
     torch.backends.cudnn.benchmark = True
+    print("cudnn.benchmark set", flush=True)
+    
     if rank == 0:
+        print("Creating SummaryWriter...", flush=True)
         writer = SummaryWriter(log_dir)
         configs_bp = join(log_dir, 'cfg.yaml')
         with open(configs_bp, 'w') as f:
             yaml.dump(configs, f)
+        print("SummaryWriter created", flush=True)
     else:
         writer = None
     step = 0
     num_eval = 0
 
     # model init
+    print("Initializing MBD model...", flush=True)
     model = MBD(local_rank=local_rank, configs=configs)
+    print("MBD model initialized!", flush=True)
 
     # dataset init
+    print("Initializing datasets...", flush=True)
     dataset_args = configs['dataset_args']
+    print(f"dataset_args: {dataset_args}", flush=True)
+    
+    print("Creating train_dataset...", flush=True)
     train_dataset = BDDataset(set_type='train', **dataset_args)
+    print(f"train_dataset created, len={len(train_dataset)}", flush=True)
+    
     train_sampler = DistributedSampler(train_dataset)
     train_loader = DataLoader(train_dataset,
                               batch_size=configs['train_batch_size'],
@@ -51,19 +82,32 @@ def train(local_rank, configs, log_dir):
                               pin_memory=True,
                               drop_last=True,
                               sampler=train_sampler)
+    print(f"train_loader created, len={len(train_loader)}", flush=True)
+    
+    print("Creating valid_dataset...", flush=True)
     valid_dataset = BDDataset(set_type='valid', **dataset_args)
+    print(f"valid_dataset created, len={len(valid_dataset)}", flush=True)
+    
     valid_loader = DataLoader(valid_dataset,
                               batch_size=configs['valid_batch_size'],
                               num_workers=configs['num_workers'],
                               pin_memory=True)
+    print(f"valid_loader created, len={len(valid_loader)}", flush=True)
 
     # training looping
+    print("Starting training loop...", flush=True)
     step_per_epoch = len(train_loader)
+    print(f"step_per_epoch: {step_per_epoch}", flush=True)
+    
     time_stamp = time.time()
     for epoch in range(configs['epoch']):
+        print(f"=== EPOCH {epoch+1}/{configs['epoch']} ===", flush=True)
         torch.cuda.empty_cache()
         train_sampler.set_epoch(epoch)
         for i, tensor in enumerate(train_loader):
+            if i == 0:
+                print(f"First batch loaded, keys: {tensor.keys()}", flush=True)
+                
             # Record time after loading data
             data_time_interval = time.time() - time_stamp
             time_stamp = time.time()
@@ -129,6 +173,7 @@ def train(local_rank, configs, log_dir):
             step += 1
 
         # Ending of an epoch
+        print(f"Epoch {epoch+1} finished, running evaluation...", flush=True)
         num_eval += 1
         if num_eval % 5 == 0:
             evaluate(model, valid_loader, num_eval, local_rank, writer)
@@ -142,6 +187,7 @@ def train(local_rank, configs, log_dir):
 
 @torch.no_grad()
 def evaluate(model, valid_loader, num_eval, local_rank, writer):
+    print(f"=== EVALUATION {num_eval} ===", flush=True)
     # Preparation
     torch.cuda.empty_cache()
     device = torch.device("cuda", local_rank)
@@ -212,6 +258,8 @@ def evaluate(model, valid_loader, num_eval, local_rank, writer):
 
 
 if __name__ == '__main__':
+    print("=== MAIN BLOCK STARTING ===", flush=True)
+    
     # load args & configs
     parser = ArgumentParser(description='Blur Decomposition')
     parser.add_argument('--local_rank', default=0, type=int, help='local rank')
@@ -220,34 +268,53 @@ if __name__ == '__main__':
     parser.add_argument('--verbose', action='store_true', help='whether to print out logs')
 
     args = parser.parse_args()
+    print(f"Args parsed: {args}", flush=True)
+    
+    print(f"Loading config from: {args.config}", flush=True)
     with open(args.config) as f:
         configs = yaml.full_load(f)
+    print(f"Config loaded, keys: {configs.keys()}", flush=True)
 
     # Import blur decomposition dataset
+    print("Determining dataset type...", flush=True)
     is_gen_blur = True
     for root_dir in configs['dataset_args']['root_dir']:
+        print(f"Checking root_dir: {root_dir}", flush=True)
         if 'b-aist++' in root_dir:
             is_gen_blur = False
+    
+    print(f"is_gen_blur: {is_gen_blur}", flush=True)
     if is_gen_blur:
+        print("Importing GenBlur dataset...", flush=True)
         from data.dataset import GenBlur as BDDataset
     else:
+        print("Importing BAistPP dataset...", flush=True)
         from data.dataset import BAistPP as BDDataset
+    print("Dataset class imported", flush=True)
 
     # DDP init
+    print("Initializing DDP...", flush=True)
     dist.init_process_group(backend="nccl")
     torch.cuda.set_device(args.local_rank)
     rank = dist.get_rank()
+    print(f"DDP initialized, rank={rank}", flush=True)
+    
     init_seeds(seed=rank)
 
     # Logger init
     if rank == 0:
+        print("Creating logger...", flush=True)
         logger = Logger(file_path=join(args.log_dir, 'log_{}.txt'.format(datetime.now().strftime('%Y_%m_%d_%H_%M_%S'))),
                         verbose=args.verbose)
+        print("Logger created", flush=True)
 
     # Training model
+    print("Calling train()...", flush=True)
     train(local_rank=args.local_rank,
           configs=configs,
           log_dir=args.log_dir)
 
     # Tear down the process group
+    print("Training complete, destroying process group...", flush=True)
     dist.destroy_process_group()
+    print("=== SCRIPT FINISHED ===", flush=True)
