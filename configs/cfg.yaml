@@ -15,8 +15,8 @@ dataset_args:
   root_dir:
     - /w/20251/shreyashree/Gopro
   suffix: png
-  use_trend: false
-  use_flow: false
+  use_trend: true
+  use_flow: true
   noisy: false
   noise_level: 10
 
