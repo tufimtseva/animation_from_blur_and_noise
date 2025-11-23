@@ -23,42 +23,6 @@ def init_seeds(seed=0):
     torch.cuda.manual_seed_all(seed)
 
 
-def add_gaussian_noise(images, noise_prob=0.5, sigma_range=(5, 25)):
-    """
-    Add Gaussian noise to images with given probability
-
-    Args:
-        images: torch.Tensor (B, C, H, W)
-        noise_prob: probability of adding noise (0.5 = 50%)
-        sigma_range: tuple of (min_sigma, max_sigma) for noise level
-
-    Returns:
-        noisy_images: torch.Tensor with noise added
-        noise_levels: torch.Tensor (B, 1) actual sigma values used (0 if no noise)
-    """
-    B = images.size(0)
-    device = images.device
-
-    # Decide which samples get noise (50% chance)
-    noise_mask = torch.rand(B, device=device) < noise_prob  # (B,)
-
-    # Generate random sigma values for each sample
-    sigma_min, sigma_max = sigma_range
-    sigma_values = torch.rand(B, device=device) * (sigma_max - sigma_min) + sigma_min  # (B,)
-
-    # Zero out sigma for samples that don't get noise
-    sigma_values = sigma_values * noise_mask.float()  # (B,)
-
-    # Add noise
-    noisy_images = images.clone()
-    for i in range(B):
-        if noise_mask[i]:
-            noise = torch.randn_like(images[i]) * (sigma_values[i] / 255.0)
-            noisy_images[i] = images[i] + noise
-            noisy_images[i] = torch.clamp(noisy_images[i], 0, 1)  # Clip to valid range
-
-    return noisy_images, sigma_values.unsqueeze(1)  # (B, 1)
-
 def train(local_rank, configs, log_dir):
     # Preparation and backup
     device = torch.device("cuda", args.local_rank)
@@ -109,80 +73,28 @@ def train(local_rank, configs, log_dir):
             data_time_interval = time.time() - time_stamp
             time_stamp = time.time()
 
-            # Move to device
+            # Update model
             tensor['inp'] = tensor['inp'].to(device)  # (b, 1, 3, h, w)
             tensor['trend'] = tensor['trend'].to(device)  # (b, 1, 2, h, w)
-
-            # NEW: Add noise augmentation (40-50% of batches)
-            original_inp = tensor['inp'].clone()
-            if random.random() < 0.45:  # 45% chance - adjust this between 0.4-0.5
-                # Squeeze from (b, 1, 3, h, w) to (b, 3, h, w) for noise function
-                inp_squeezed = tensor['inp'].squeeze(1)
-                noisy_inp, noise_levels = add_gaussian_noise(
-                    inp_squeezed,
-                    noise_prob=1.0,  # All samples in this batch get noise
-                    sigma_range=(5, 25)  # Random sigma between 5-25
-                )
-                tensor['inp'] = noisy_inp.unsqueeze(1)  # Back to (b, 1, 3, h, w)
-                tensor['noise_level'] = noise_levels  # Store for model
-            else:
-                # No noise - set noise level to 0
-                tensor['noise_level'] = torch.zeros(tensor['inp'].size(0), 1).to(device)
-
-            # Update model
             out_tensor = model.update(inp_tensor=tensor, training=True)
             if out_tensor is None:
                 print("skip this batch")
                 continue
             loss = out_tensor['loss']
-        # for i, tensor in enumerate(train_loader):
-        #     # Record time after loading data
-        #     data_time_interval = time.time() - time_stamp
-        #     time_stamp = time.time()
-        #
-        #     # Update model
-        #     tensor['inp'] = tensor['inp'].to(device)  # (b, 1, 3, h, w)
-        #     tensor['trend'] = tensor['trend'].to(device)  # (b, 1, 2, h, w)
-        #     out_tensor = model.update(inp_tensor=tensor, training=True)
-        #     if out_tensor is None:
-        #         print("skip this batch")
-        #         continue
-        #     loss = out_tensor['loss']
             # Record time after updating model
             train_time_interval = time.time() - time_stamp
             time_stamp = time.time()
 
             # Print training info
-            # if step % 100 == 0:
-            #     if rank == 0:
-            #         writer.add_scalar('learning_rate', model.get_lr(), step)
-            #         msg = 'epoch: {:>3}, batch: [{:>5}/{:>5}], time: {:.2f} + {:.2f} sec, '
-            #         msg = msg.format(epoch,
-            #                          i + 1,
-            #                          step_per_epoch,
-            #                          data_time_interval,
-            #                          train_time_interval)
-            #         for key, val in loss.items():
-            #             writer.add_scalar('train/loss_{}'.format(key), val, step)
-            #             msg += 'loss_{}: {:.5f} '.format(key, val)
-            #         msg += 'loss: {:.5f}'.format(sum(loss.values()))
-            #         logger(msg, prefix='[train]')
-
             if step % 100 == 0:
                 if rank == 0:
                     writer.add_scalar('learning_rate', model.get_lr(), step)
-
-                    # NEW: Log average noise level in this batch
-                    avg_noise = tensor['noise_level'].mean().item()
-                    writer.add_scalar('train/noise_level', avg_noise, step)
-
-                    msg = 'epoch: {:>3}, batch: [{:>5}/{:>5}], time: {:.2f} + {:.2f} sec, noise: {:.1f}, '
+                    msg = 'epoch: {:>3}, batch: [{:>5}/{:>5}], time: {:.2f} + {:.2f} sec, '
                     msg = msg.format(epoch,
                                      i + 1,
                                      step_per_epoch,
                                      data_time_interval,
-                                     train_time_interval,
-                                     avg_noise)
+                                     train_time_interval)
                     for key, val in loss.items():
                         writer.add_scalar('train/loss_{}'.format(key), val, step)
                         msg += 'loss_{}: {:.5f} '.format(key, val)
@@ -232,8 +144,7 @@ def evaluate(model, valid_loader, num_eval, local_rank, writer):
     # Preparation
     torch.cuda.empty_cache()
     device = torch.device("cuda", local_rank)
-    loss_meter_clean = AverageMeter()
-    loss_meter_noisy = AverageMeter()
+    loss_meter = AverageMeter()
     time_stamp = time.time()
 
     # One epoch validation
@@ -241,39 +152,27 @@ def evaluate(model, valid_loader, num_eval, local_rank, writer):
     for i, tensor in enumerate(valid_loader):
         tensor['inp'] = tensor['inp'].to(device)  # (b, 1, 3, h, w)
         tensor['trend'] = tensor['trend'].to(device)  # (b, 1, 2, h, w)
-
-        # Test 1: Clean images
-        tensor['noise_level'] = torch.zeros(tensor['inp'].size(0), 1).to(device)
         out_tensor = model.update(inp_tensor=tensor, training=False)
-        if out_tensor is not None:
-            loss_clean = sum(out_tensor['loss'].values())
-            b = tensor['inp'].size(0)
-            loss_meter_clean.update(loss_clean, b)
+        if out_tensor is None:
+            print("skip this batch")
+            continue
+        pred_trends = out_tensor['pred_trends']  # pred_imgs shape (b, 2, h, 2*w)
+        gt_trend = out_tensor['gt_trend']  # gt_imgs shape (b, 2, h, w)
+        loss = out_tensor['loss']
+        loss = sum(loss.values())
 
-        # Test 2: Noisy images (sigma=15 for consistent evaluation)
-        inp_squeezed = tensor['inp'].squeeze(1)
-        noisy_inp, noise_levels = add_gaussian_noise(
-            inp_squeezed,
-            noise_prob=1.0,
-            sigma_range=(15, 15)  # Fixed sigma for evaluation
-        )
-        tensor_noisy = {
-            'inp': noisy_inp.unsqueeze(1),
-            'trend': tensor['trend'],
-            'noise_level': noise_levels
-        }
+        # Record loss and metrics
+        pred_trends = pred_trends.detach()
+        gt_trend = gt_trend.detach()
+        b = pred_trends.size(0)
+        loss_meter.update(loss, b)
 
-        out_tensor_noisy = model.update(inp_tensor=tensor_noisy, training=False)
-        if out_tensor_noisy is not None:
-            loss_noisy = sum(out_tensor_noisy['loss'].values())
-            loss_meter_noisy.update(loss_noisy, b)
-
-        # Record image results (from clean version)
-        if rank == 0 and i == random_idx and out_tensor is not None:
+        # Record image results
+        if rank == 0 and i == random_idx:
             inp_img = out_tensor['inp_img']  # inp_img shape (b, c, h, w)
             inp_img = inp_img.permute(0, 2, 3, 1).cpu().detach().numpy().astype(np.uint8)
-            pred_trends = out_tensor['pred_trends'].permute(0, 2, 3, 1).cpu().detach().numpy()
-            gt_trend = out_tensor['gt_trend'].permute(0, 2, 3, 1).cpu().detach().numpy()
+            pred_trends = pred_trends.permute(0, 2, 3, 1).cpu().detach().numpy()
+            gt_trend = gt_trend.permute(0, 2, 3, 1).cpu().detach().numpy()
 
             pred_trends_rgb = []
             gt_trend_rgb = []
@@ -282,17 +181,17 @@ def evaluate(model, valid_loader, num_eval, local_rank, writer):
                 gt_trend_rgb.append(trend_plus_vis(gt_item))
 
             for j in range(b):
+                # Record predicted images pair
                 cat_imgs = np.concatenate([inp_img[j], pred_trends_rgb[j], gt_trend_rgb[j]],
-                                          axis=1)
+                                          axis=1)  # (h, 4 * w, c)
                 writer.add_image('valid/imgs_results_{}'.format(j), cat_imgs, num_eval, dataformats='HWC')
 
     # Ending of validation
     eval_time_interval = time.time() - time_stamp
     if rank == 0:
-        writer.add_scalar('valid/loss_clean', loss_meter_clean.avg, num_eval)
-        writer.add_scalar('valid/loss_noisy', loss_meter_noisy.avg, num_eval)
-        msg = 'eval time: {:.1f} sec, loss_clean: {:.5f}, loss_noisy: {:.5f}'.format(
-            eval_time_interval, loss_meter_clean.avg, loss_meter_noisy.avg
+        writer.add_scalar('valid/loss', loss_meter.avg, num_eval)
+        msg = 'eval time: {} sec, loss: {:.5f}'.format(
+            eval_time_interval, loss_meter.avg
         )
         logger(msg, prefix='[valid]')
 
