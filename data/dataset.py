@@ -391,7 +391,7 @@ class BAistPP(Dataset):
         Load images (RGB) and resize to fit in GPU memory
         """
         tensor = {}
-        target_size = (256, 256)  # (width, height) for cv2.resize
+        target_size = (256, 256)
 
         try:
             # load and resize input images
