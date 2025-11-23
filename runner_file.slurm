@@ -5,7 +5,7 @@
 #SBATCH --gres=gpu:1           # request 1 GPU
 #SBATCH --cpus-per-task=4
 #SBATCH --mem=33G
-#SBATCH --time=02:00:00
+#SBATCH --time=06:00:00
 #SBATCH --output=slurm-%j.out  # log file
 #SBATCH --exclude=gpunode16
 
