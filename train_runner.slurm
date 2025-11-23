@@ -21,7 +21,7 @@ cd ~/animation_from_blur_and_noise
 
 torchrun --nproc_per_node=1 train_mbd.py \
   --config ./configs/cfg.yaml \
-  --log_dir ./log \
+  --log_dir /w/20251/shreyashree/log \
   --verbose
 
 #torchrun  train_mbd.py \

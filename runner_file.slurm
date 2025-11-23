@@ -24,7 +24,7 @@ conda activate animation-from-blur
 # Run the evaluation script
 torchrun  valid_vaegan.py \
   --predictor_resume_dir ./checkpoints/baistpp_cvaegan_gumble_celoss_z4/ \
-  --decomposer_resume_dir ./log \
+  --decomposer_resume_dir /w/20251/shreyashree/log \
   --data_dir /w/20251/shreyashree/Gopro \
   -ns 1 \
   --verbose
