@@ -228,13 +228,9 @@ class BAistPP(Dataset):
 
                 inp_path = join(inp_dir_path, inp_fmt.format(frame_num))
                 gt_path = join(gt_dir_path, gt_fmt.format(frame_num))
-                print(
-                    f"[DEBUG] Checking {inp_path}, exists={os.path.exists(inp_path)}")
-                print(
-                    f"[DEBUG] Checking {gt_path}, exists={os.path.exists(gt_path)}")
+
                 if exists(inp_path) and exists(gt_path):
                     sample['inp'].append(inp_path)
-                    print("hio")
                     sample['gt'] += [gt_path] * num_gts
                     samples.append(sample)
                     count += 1
