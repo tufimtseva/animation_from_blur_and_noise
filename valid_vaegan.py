@@ -122,36 +122,36 @@ def evaluate(d_model, p_model, valid_loader, local_rank, num_sampling, logger, s
     for i, tensor in enumerate(tqdm(valid_loader, total=len(valid_loader))):
         tensor['inp'] = tensor['inp'].to(device)  # (b, 1, 3, h, w)
 
-        torch.cuda.empty_cache()
-
-        blurry_input = tensor['inp'].squeeze(1)  # Remove the '1' dimension
-
-        # Check data range and normalize if needed
-        if blurry_input.max() > 1.0:
-            # Data is in [0, 255] range
-            blurry_input_normalized = blurry_input / 255.0
-            needs_denorm = True
-        else:
-            # Data is already in [0, 1] range
-            blurry_input_normalized = blurry_input
-            needs_denorm = False
-
-        # Apply Restormer denoising
-        denoised_blur = denoiser(blurry_input_normalized)
-
-        # Denormalize back to original range if needed
-        if needs_denorm:
-            denoised_blur = denoised_blur * 255.0
-
-        # Restore the expected shape: (b, 3, h, w) -> (b, 1, 3, h, w)
-        tensor['inp'] = denoised_blur.unsqueeze(1)
-
-        if i == 0:
-            print(
-                f"\n[Denoising] Input range: [{blurry_input.min():.2f}, {blurry_input.max():.2f}]")
-            print(
-                f"[Denoising] Output range: [{denoised_blur.min():.2f}, {denoised_blur.max():.2f}]")
-            print(f"[Denoising] Normalized for denoiser: {needs_denorm}\n")
+        # torch.cuda.empty_cache()
+        #
+        # blurry_input = tensor['inp'].squeeze(1)  # Remove the '1' dimension
+        #
+        # # Check data range and normalize if needed
+        # if blurry_input.max() > 1.0:
+        #     # Data is in [0, 255] range
+        #     blurry_input_normalized = blurry_input / 255.0
+        #     needs_denorm = True
+        # else:
+        #     # Data is already in [0, 1] range
+        #     blurry_input_normalized = blurry_input
+        #     needs_denorm = False
+        #
+        # # Apply Restormer denoising
+        # denoised_blur = denoiser(blurry_input_normalized)
+        #
+        # # Denormalize back to original range if needed
+        # if needs_denorm:
+        #     denoised_blur = denoised_blur * 255.0
+        #
+        # # Restore the expected shape: (b, 3, h, w) -> (b, 1, 3, h, w)
+        # tensor['inp'] = denoised_blur.unsqueeze(1)
+        #
+        # if i == 0:
+        #     print(
+        #         f"\n[Denoising] Input range: [{blurry_input.min():.2f}, {blurry_input.max():.2f}]")
+        #     print(
+        #         f"[Denoising] Output range: [{denoised_blur.min():.2f}, {denoised_blur.max():.2f}]")
+        #     print(f"[Denoising] Normalized for denoiser: {needs_denorm}\n")
 
 
 
@@ -229,11 +229,11 @@ def evaluate(d_model, p_model, valid_loader, local_rank, num_sampling, logger, s
     msg = 'eval time: {} sec, psnr: {:.5f}, ssim: {:.5f}, lpips: {:.4f}'.format(
         eval_time_interval, psnr_meter.avg, ssim_meter.avg, lpips_meter.avg
     )
-    logger(msg, prefix='[valid WITH RESTORMER]')  # Modified prefix to show denoising is active
+    logger(msg, prefix='[valid WITHOUT RESTORMER]')  # Modified prefix to show denoising is active
     msg = 'eval time: {:.4f} sec, psnr: {:.4f}, ssim: {:.4f}, lpips: {:.4f}'.format(
         eval_time_interval, psnr_meter_better.avg, ssim_meter_better.avg, lpips_meter_better.avg
     )
-    logger(msg, prefix='[valid max. WITH RESTORMER]')  # Modified prefix
+    logger(msg, prefix='[valid max. WITHOUT RESTORMER]')  # Modified prefix
     logger.close()
 
 @record

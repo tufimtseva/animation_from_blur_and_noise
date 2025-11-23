@@ -218,12 +218,12 @@ class BAistPP(Dataset):
             inp_dir_path = join(root_dir, vid_dir, 'blur')
             gt_dir_path = join(root_dir, vid_dir, 'sharp')
 
-            print(
-                f"[DEBUG] Checking {vid_dir}: inp={inp_dir_path}, exists={os.path.exists(inp_dir_path)}")
+            # print(
+                # f"[DEBUG] Checking {vid_dir}: inp={inp_dir_path}, exists={os.path.exists(inp_dir_path)}")
 
             if not os.path.exists(inp_dir_path) or not os.path.exists(
                     gt_dir_path):
-                print(f"[DEBUG] SKIP - directories don't exist")
+                # print(f"[DEBUG] SKIP - directories don't exist")
                 continue
 
             try:
@@ -232,8 +232,8 @@ class BAistPP(Dataset):
                 sharp_imgs = sorted([item for item in os.listdir(gt_dir_path) if
                                      item.endswith(suffix)])
 
-                print(
-                    f"[DEBUG] Found {len(blur_imgs)} blur, {len(sharp_imgs)} sharp")
+                # print(
+                    # f"[DEBUG] Found {len(blur_imgs)} blur, {len(sharp_imgs)} sharp")
 
                 blur_indices = sorted(
                     [int(img.split('.')[0]) for img in blur_imgs])
@@ -244,7 +244,7 @@ class BAistPP(Dataset):
                 continue
 
             valid_indices = sorted(set(blur_indices) & set(sharp_indices))
-            print(f"[DEBUG] Valid indices: {len(valid_indices)}")
+            # print(f"[DEBUG] Valid indices: {len(valid_indices)}")
 
             # if len(valid_indices) < 3:
             #     print(f"[DEBUG] SKIP - not enough frames")
@@ -272,7 +272,7 @@ class BAistPP(Dataset):
                     samples.append(sample)
                     count += 1
 
-            print(f"[DEBUG] Added {count} samples from {vid_dir}")
+            # print(f"[DEBUG] Added {count} samples from {vid_dir}")
 
         print(f"[DEBUG] TOTAL samples: {len(samples)}")
         return samples
@@ -495,8 +495,6 @@ class BAistPP(Dataset):
         tensor = self.replay_image_aug(tensor, self.img_transform)
         tensor = self.replay_video_aug(tensor, self.vid_transform)
         if self.noisy:
-            print("noisy? ", self.noisy)
-            print("Adding noise with ", self.sigma)
             inp = [torch.from_numpy(img).float() for img in tensor['inp']]
             tensor['inp'] = [self.add_noise(img, self.sigma) for img in inp]
         tensor['inp'] = torch.from_numpy(np.stack(tensor['inp'], axis=0).transpose((0, 3, 1, 2))).float()
