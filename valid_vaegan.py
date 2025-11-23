@@ -102,7 +102,7 @@ def validation(local_rank, d_configs, p_configs, num_sampling, logger):
                                   num_workers=d_configs['num_workers'],
                                   pin_memory=True)
 
-    evaluate(d_model, p_model, valid_loader, local_rank, num_sampling, logger, valid_dataset.sigma, denoiser)
+        evaluate(d_model, p_model, valid_loader, local_rank, num_sampling, logger, valid_dataset.sigma, denoiser)
 
 
 @torch.no_grad()
