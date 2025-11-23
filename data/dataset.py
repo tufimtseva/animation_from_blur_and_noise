@@ -246,7 +246,7 @@ class BAistPP(Dataset):
             valid_indices = sorted(set(blur_indices) & set(sharp_indices))
             print(f"[DEBUG] Valid indices: {len(valid_indices)}")
 
-            if len(valid_indices) < 81:
+            if len(valid_indices) < 1:
                 print(f"[DEBUG] SKIP - not enough frames")
                 continue
 
