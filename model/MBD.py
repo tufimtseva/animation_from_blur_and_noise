@@ -167,11 +167,15 @@ class MBD:
             self.eval()
         
         out_tensor = {}
-        blur_img, sharp_imgs, trend_img = inp_tensor['inp'], inp_tensor['gt'], inp_tensor['trend']
+        blur_img = inp_tensor['inp']
+        sharp_imgs = inp_tensor['gt']
+        trend_img = inp_tensor.get('trend', None)
         b, n, c, h, w = blur_img.shape
         blur_img = blur_img.reshape(b, n * c, h, w)
-        b, n, tc, h, w = trend_img.shape
-        trend_img = trend_img.reshape(b, n * tc, h, w)
+        
+        if trend_img is not None:
+            b_t, n_t, tc, h_t, w_t = trend_img.shape
+            trend_img = trend_img.reshape(b_t, n_t * tc, h_t, w_t)
         blur_img = blur_img / self.val_range
         sharp_imgs = sharp_imgs / self.val_range
 
@@ -251,7 +255,8 @@ class MBD:
         out_tensor['loss_perc'] = loss_perc  # NEW: for logging
         out_tensor['loss_temporal'] = loss_temporal  # NEW: for logging
         out_tensor['inp_img'] = self.val_range * blur_img[:, :c].detach()
-        out_tensor['trend_img'] = trend_img.detach()
+        if trend_img is not None:
+            out_tensor['trend_img'] = trend_img.detach()
         out_tensor['pred_imgs'] = torch.clamp(self.val_range * all_pred_imgs[-1].detach(), min=0, max=self.val_range)
         out_tensor['gt_imgs'] = self.val_range * sharp_imgs
 

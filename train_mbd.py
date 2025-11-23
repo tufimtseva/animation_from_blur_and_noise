@@ -142,17 +142,20 @@ def train(local_rank, configs, log_dir):
 
             if (rank == 0) and (step % 500 == 0):
                 inp_img = out_tensor['inp_img']  # inp_img shape (b, c, h, w)
-                trend_img = out_tensor['trend_img']  # trend_img shape (b, 2, h, w)
+                trend_img = out_tensor.get('trend_img', None)  # Optional: only if use_trend=True
                 pred_imgs = out_tensor['pred_imgs']  # pred_imgs shape (b, num_gts, 3, h, w)
                 gt_imgs = out_tensor['gt_imgs']  # gt_imgs shape (b, num_gts, 3, h, w)
 
                 # Prepare recorded results
                 inp_img = inp_img.permute(0, 2, 3, 1).cpu().detach().numpy().astype(np.uint8)
 
-                trend_img = trend_img.permute(0, 2, 3, 1).cpu().detach().numpy()
-                trend_img_rgb = []
-                for item in trend_img:
-                    trend_img_rgb.append(trend_plus_vis(item))
+                if trend_img is not None:
+                    trend_img = trend_img.permute(0, 2, 3, 1).cpu().detach().numpy()
+                    trend_img_rgb = []
+                    for item in trend_img:
+                        trend_img_rgb.append(trend_plus_vis(item))
+                else:
+                    trend_img_rgb = None
 
                 b, num_gts, c, h, w = pred_imgs.shape
                 pred_imgs = pred_imgs.permute(0, 3, 1, 4, 2).reshape(b, h, num_gts * w, c)
@@ -163,10 +166,12 @@ def train(local_rank, configs, log_dir):
                 # Record each sample results in the batch
                 for j in range(b):
                     # Record predicted images pair
-                    cat_pred_imgs = np.concatenate([inp_img[j], trend_img_rgb[j], pred_imgs[j]],
-                                                   axis=1)  # (h, (2 + num_gts) * w, c)
-                    cat_gt_imgs = np.concatenate([inp_img[j], trend_img_rgb[j], gt_imgs[j]],
-                                                 axis=1)  # (h, (2 + num_gts) * w, c)
+                    if trend_img_rgb is not None:
+                        cat_pred_imgs = np.concatenate([inp_img[j], trend_img_rgb[j], pred_imgs[j]], axis=1)
+                        cat_gt_imgs = np.concatenate([inp_img[j], trend_img_rgb[j], gt_imgs[j]], axis=1)
+                    else:
+                        cat_pred_imgs = np.concatenate([inp_img[j], pred_imgs[j]], axis=1)
+                        cat_gt_imgs = np.concatenate([inp_img[j], gt_imgs[j]], axis=1)
                     cat_imgs = np.concatenate([cat_gt_imgs, cat_pred_imgs], axis=0)
                     writer.add_image('train/imgs_results_{}'.format(j), cat_imgs, step, dataformats='HWC')
 
@@ -224,12 +229,14 @@ def evaluate(model, valid_loader, num_eval, local_rank, writer):
         # Record image results
         if rank == 0 and i == random_idx:
             inp_img = out_tensor['inp_img']  # inp_img shape (b, c, h, w)
-            inp_img = inp_img.permute(0, 2, 3, 1).cpu().detach().numpy().astype(np.uint8)
-
-            trend_img = out_tensor['trend_img']  # trend_img shape (b, 2, h, w)
-            trend_img = trend_img.permute(0, 2, 3, 1).cpu().detach().numpy()
-            trend_img_rgb = []
-            for item in trend_img:
+            trend_img = out_tensor.get('trend_img', None)  # Optional
+            if trend_img is not None:
+                trend_img = trend_img.permute(0, 2, 3, 1).cpu().detach().numpy()
+                trend_img_rgb = []
+                for item in trend_img:
+                    trend_img_rgb.append(trend_plus_vis(item))
+            else:
+                trend_img_rgb = None
                 trend_img_rgb.append(trend_plus_vis(item))
 
             pred_imgs = pred_imgs.permute(0, 3, 1, 4, 2).reshape(b, h, num_gts * w, c)
@@ -240,9 +247,9 @@ def evaluate(model, valid_loader, num_eval, local_rank, writer):
 
             for j in range(b):
                 # Record predicted images pair
-                cat_pred_imgs = np.concatenate([inp_img[j], trend_img_rgb[j], pred_imgs[j]],
-                                               axis=1)  # (h, (2 + num_gts) * w, c)
-                cat_gt_imgs = np.concatenate([inp_img[j], trend_img_rgb[j], gt_imgs[j]],
+                if trend_img_rgb is not None:
+                    cat_pred_imgs = np.concatenate([inp_img[j], trend_img_rgb[j], pred_imgs[j]], axis=1)
+                    cat_gt_imgs = np.concatenate([inp_img[j], trend_img_rgb[j], gt_imgs[j]],
                                              axis=1)  # (h, (2 + num_gts) * w, c)
                 cat_imgs = np.concatenate([cat_gt_imgs, cat_pred_imgs], axis=0)
                 writer.add_image('valid/imgs_results_{}'.format(j), cat_imgs, num_eval, dataformats='HWC')

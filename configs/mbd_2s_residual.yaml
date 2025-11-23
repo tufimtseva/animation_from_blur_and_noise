@@ -1,3 +1,4 @@
+use_trend: False
 dataset_args:
   aug_args:
     train:
@@ -52,7 +53,7 @@ decomposer_s2_args:
   num_down_blocks: 2
   out_channels: 21
   trans_up: true
-epoch: 400
+epoch: 100
 flow_embedder_args:
   i: -1
   multires: 5
@@ -71,9 +72,9 @@ resume_dir: null
 s1_to_s2: true
 scheduler:
   eta_min: 1.0e-06
-train_batch_size: 2
+train_batch_size: 1
 trend_embedder_args:
   i: -1
   multires: 5
 val_range: 255.0
-valid_batch_size: 2
+valid_batch_size: 1

@@ -48,12 +48,16 @@ class NearBBoxResizedSafeCrop:
         self.max_ratio = max_ratio
 
     def __call__(self, image, bbox, flow=False, trend=False, args=None):
-        if len(bbox) == 5:
+        img_h, img_w, _ = image.shape
+        
+        # Handle None bbox (for datasets without bounding boxes)
+        if bbox is None:
+            x_min, y_min, x_max, y_max = 0, 0, img_w, img_h
+        elif len(bbox) == 5:
             x_min, y_min, x_max, y_max, _ = bbox
         else:
             x_min, y_min, x_max, y_max = bbox
-        img_h, img_w, _ = image.shape
-
+            
         # Prepare args
         if args is None:
             args = {}
@@ -159,7 +163,7 @@ class Rot90:
             # image = trend_rot90(image, n=n)
         else:
             image = torch.rot90(image, k=n, dims=[-2, -1])
-        image = image.squeeze(dim=0).permute(1, 2, 0).numpy().astype(np.float)
+        image = image.squeeze(dim=0).permute(1, 2, 0).numpy().astype(np.float32)
 
         return {'image': image, 'bbox': bbox}, args
 
@@ -201,7 +205,7 @@ class Flip:
                 image = torch.flip(image, dims=[-2, ])
             else:
                 raise NotImplementedError('flip_flag: {}'.format(flip_flag))
-        image = image.squeeze(dim=0).permute(1, 2, 0).numpy().astype(np.float)
+        image = image.squeeze(dim=0).permute(1, 2, 0).numpy().astype(np.float32)
 
         return {'image': image, 'bbox': bbox}, args
 
@@ -218,9 +222,9 @@ class ColorJitter:
         if args is None:
             tsf_image = self.transform(image=image.astype(np.uint8))
             args = tsf_image['replay']
-            image = tsf_image['image'].astype(np.float)
+            image = tsf_image['image'].astype(np.float32)
         else:
-            image = A.ReplayCompose.replay(args, image=image.astype(np.uint8))['image'].astype(np.float)
+            image = A.ReplayCompose.replay(args, image=image.astype(np.uint8))['image'].astype(np.float32)
 
         return {'image': image, 'bbox': bbox}, args
 
@@ -270,7 +274,7 @@ class Reverse:
                     image = torch.from_numpy(image).permute(2, 0, 1).unsqueeze(dim=0)  # (1, c, h, w)
                     image = flow_diagonal_reverse(image)
                     # image = trend_diagonal_reverse(image)
-                    images[i] = image.squeeze(dim=0).permute(1, 2, 0).numpy().astype(np.float)
+                    images[i] = image.squeeze(dim=0).permute(1, 2, 0).numpy().astype(np.float32)
             else:
                 images = images[::-1]
         else:
