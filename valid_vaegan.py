@@ -51,7 +51,7 @@ def validation(local_rank, d_configs, p_configs, num_sampling, logger):
         denoiser = Restormer(
             inp_channels=3,
             out_channels=3,
-            dim=48,
+            dim=24,
             num_blocks=[4, 6, 6, 8],
             num_refinement_blocks=4,
             heads=[1, 2, 4, 8],
@@ -118,47 +118,47 @@ def evaluate(d_model, p_model, valid_loader, local_rank, num_sampling, logger, s
 
         blurry_input = tensor['inp'].squeeze(1)  # Remove the '1' dimension
 
-        # # Check data range and normalize if needed
-        # if blurry_input.max() > 1.0:
-        #     # Data is in [0, 255] range
-        #     blurry_input_normalized = blurry_input / 255.0
-        #     needs_denorm = True
-        # else:
-        #     # Data is already in [0, 1] range
-        #     blurry_input_normalized = blurry_input
-        #     needs_denorm = False
-        #
-        # # Apply Restormer denoising
-        # denoised_blur = denoiser(blurry_input_normalized)
-        #
-        # # Denormalize back to original range if needed
-        # if needs_denorm:
-        #     denoised_blur = denoised_blur * 255.0
-        #
-        # # Restore the expected shape: (b, 3, h, w) -> (b, 1, 3, h, w)
-        # tensor['inp'] = denoised_blur.unsqueeze(1)
-
-        # Move to CPU for denoising
-        blurry_cpu = blurry_input.cpu()
-
-        if blurry_cpu.max() > 1.0:
-            blurry_cpu = blurry_cpu / 255.0
+        # Check data range and normalize if needed
+        if blurry_input.max() > 1.0:
+            # Data is in [0, 255] range
+            blurry_input_normalized = blurry_input / 255.0
             needs_denorm = True
         else:
+            # Data is already in [0, 1] range
+            blurry_input_normalized = blurry_input
             needs_denorm = False
 
-        # Denoise on CPU (slower but saves GPU memory)
-        denoised_blur = denoiser.cpu()(blurry_cpu)
+        # Apply Restormer denoising
+        denoised_blur = denoiser(blurry_input_normalized)
 
+        # Denormalize back to original range if needed
         if needs_denorm:
             denoised_blur = denoised_blur * 255.0
 
-        # Move back to GPU
-        denoised_blur = denoised_blur.to(device)
+        # Restore the expected shape: (b, 3, h, w) -> (b, 1, 3, h, w)
         tensor['inp'] = denoised_blur.unsqueeze(1)
 
-        # Move denoiser back to GPU for next iteration
-        denoiser = denoiser.cuda(local_rank)
+        # # Move to CPU for denoising
+        # blurry_cpu = blurry_input.cpu()
+        #
+        # if blurry_cpu.max() > 1.0:
+        #     blurry_cpu = blurry_cpu / 255.0
+        #     needs_denorm = True
+        # else:
+        #     needs_denorm = False
+        #
+        # # Denoise on CPU (slower but saves GPU memory)
+        # denoised_blur = denoiser.cpu()(blurry_cpu)
+        #
+        # if needs_denorm:
+        #     denoised_blur = denoised_blur * 255.0
+        #
+        # # Move back to GPU
+        # denoised_blur = denoised_blur.to(device)
+        # tensor['inp'] = denoised_blur.unsqueeze(1)
+        #
+        # # Move denoiser back to GPU for next iteration
+        # denoiser = denoiser.cuda(local_rank)
 
 
         # Optional: Print debug info for first batch
