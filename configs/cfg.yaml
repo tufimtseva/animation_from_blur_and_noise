@@ -43,7 +43,8 @@ dataset_args:
     train:
       image:
         RandomCrop_1:
-          size: [256, 256]
+          height: 256
+          width: 256
       video:
         RandomHorizontalFlip_1:
           p: 0.5
@@ -52,7 +53,8 @@ dataset_args:
     valid:
       image:
         CenterCrop_1:
-          size: [256, 256]
+          height: 256
+          width: 256
       video: {}
 
 # Optimizer settings
