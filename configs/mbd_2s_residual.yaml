@@ -24,6 +24,10 @@ dataset_args:
     - ./dataset/b-aist++
   suffix: png
   use_trend: True
+
+  perc_ratio: 0.05       # Enable existing perceptual loss
+  temporal_ratio: 0.5    # Enable new temporal consistency
+  temporal_order: 1      # First-order smoothness
   video_list:
     b-aist++:
       train: ./configs/b-aist++_train_dancer2_videos.yaml
