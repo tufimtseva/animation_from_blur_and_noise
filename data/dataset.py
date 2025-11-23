@@ -211,8 +211,8 @@ class BAistPP(Dataset):
         inp_fmt = '{:06d}.' + suffix
         gt_fmt = '{:06d}.' + suffix
 
-        print(f"[DEBUG] gen_samples_gopro called with root_dir={root_dir}")
-        print(f"[DEBUG] video_dirs={video_dirs}")
+        # print(f"[DEBUG] gen_samples_gopro called with root_dir={root_dir}")
+        # print(f"[DEBUG] video_dirs={video_dirs}")
 
         for vid_dir in video_dirs:
             inp_dir_path = join(root_dir, vid_dir, 'blur')
@@ -274,7 +274,7 @@ class BAistPP(Dataset):
 
             # print(f"[DEBUG] Added {count} samples from {vid_dir}")
 
-        print(f"[DEBUG] TOTAL samples: {len(samples)}")
+        # print(f"[DEBUG] TOTAL samples: {len(samples)}")
         return samples
 
     # def gen_samples(self, root_dir, video_list, suffix, num_gts, num_fut, num_past):
