@@ -1,11 +1,7 @@
 """
-Modified MBD.py with Enhanced Loss for Noise Robustness
-========================================================
 Changes from original:
-1. Added temporal consistency loss (NEW)
-2. Perceptual loss already exists (just enable via perc_ratio in config)
-
-Only showing the modified/added sections - merge these into your MBD.py
+1. Added temporal consistency loss 
+2. Perceptual loss already exists ( enable via perc_ratio in config)
 """
 
 import itertools
