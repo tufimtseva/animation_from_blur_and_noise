@@ -353,32 +353,87 @@ class BAistPP(Dataset):
                 return i
         return FileNotFoundError
 
+    # def load_sample(self, sample):
+    #     """
+    #     Load images (RGB), annotations (bboxes) and trend guidance from the paths in the sample dict to store as tensor dict
+    #     """
+    #     tensor = {}
+    #     try:
+    #         # load data and annotation (bbox) for input
+    #         tensor['inp'] = [cv2.cvtColor(cv2.imread(img_path), cv2.COLOR_BGR2RGB) for img_path in sample['inp']]
+    #         h, w, _ = tensor['inp'][0].shape
+    #         tensor['inp_bbox'] = []
+    #         for anno_path in sample['inp_anno']:
+    #             with open(anno_path, 'rb') as f:
+    #                 anno_data = pickle.load(f)
+    #             tensor['inp_bbox'].append(anno_data['bbox'])
+    #         # load data for gt
+    #         tensor['gt'] = [cv2.cvtColor(cv2.imread(img_path), cv2.COLOR_BGR2RGB) for img_path in sample['gt']]
+    #         if self.use_trend:
+    #             # load trend guidance
+    #             tensor['trend'] = []
+    #             for trend_path in sample['trend']:
+    #                 trend = np.load(trend_path)
+    #                 # recover the size of the trend as input image
+    #                 trend = cv2.resize(trend, (w, h), interpolation=cv2.INTER_NEAREST)
+    #                 tensor['trend'].append(trend)
+    #         if self.use_flow:
+    #             # load optical flow
+    #             tensor['flow'] = []
+    #             for flow_path in sample['flow']:
+    #                 flow = np.load(flow_path)
+    #                 flow_x = flow[:, :, 0::2]
+    #                 flow_y = flow[:, :, 1::2]
+    #                 flow_x = np.mean(flow_x, axis=-1, keepdims=True)
+    #                 flow_y = np.mean(flow_y, axis=-1, keepdims=True)
+    #                 flow = np.concatenate([flow_x, flow_y], axis=-1)
+    #                 flow = cv2.resize(flow, (w, h), interpolation=cv2.INTER_AREA)  # (h, w, 2)
+    #                 tensor['flow'].append(flow)
+    #         # load video name
+    #         tensor['video'] = sample['video']
+    #     except:
+    #         # print(sample['inp'])
+    #         return None
+    #     return tensor
+
     def load_sample(self, sample):
         """
-        Load images (RGB), annotations (bboxes) and trend guidance from the paths in the sample dict to store as tensor dict
+        Load images (RGB) and resize to fit in GPU memory
         """
         tensor = {}
+        target_size = (256, 256)
+
         try:
-            # load data and annotation (bbox) for input
-            tensor['inp'] = [cv2.cvtColor(cv2.imread(img_path), cv2.COLOR_BGR2RGB) for img_path in sample['inp']]
+            # load and resize input images
+            tensor['inp'] = []
+            for img_path in sample['inp']:
+                img = cv2.cvtColor(cv2.imread(img_path), cv2.COLOR_BGR2RGB)
+                img = cv2.resize(img, target_size,
+                                 interpolation=cv2.INTER_LINEAR)
+                tensor['inp'].append(img)
+
             h, w, _ = tensor['inp'][0].shape
+
+            # skip inp_bbox since GoPro doesn't have annotations
             tensor['inp_bbox'] = []
-            for anno_path in sample['inp_anno']:
-                with open(anno_path, 'rb') as f:
-                    anno_data = pickle.load(f)
-                tensor['inp_bbox'].append(anno_data['bbox'])
-            # load data for gt
-            tensor['gt'] = [cv2.cvtColor(cv2.imread(img_path), cv2.COLOR_BGR2RGB) for img_path in sample['gt']]
+
+            # load and resize gt images
+            tensor['gt'] = []
+            for img_path in sample['gt']:
+                img = cv2.cvtColor(cv2.imread(img_path), cv2.COLOR_BGR2RGB)
+                img = cv2.resize(img, target_size,
+                                 interpolation=cv2.INTER_LINEAR)
+                tensor['gt'].append(img)
+
             if self.use_trend:
-                # load trend guidance
                 tensor['trend'] = []
                 for trend_path in sample['trend']:
                     trend = np.load(trend_path)
-                    # recover the size of the trend as input image
-                    trend = cv2.resize(trend, (w, h), interpolation=cv2.INTER_NEAREST)
+                    trend = cv2.resize(trend, target_size,
+                                       interpolation=cv2.INTER_NEAREST)
                     tensor['trend'].append(trend)
+
             if self.use_flow:
-                # load optical flow
                 tensor['flow'] = []
                 for flow_path in sample['flow']:
                     flow = np.load(flow_path)
@@ -387,14 +442,16 @@ class BAistPP(Dataset):
                     flow_x = np.mean(flow_x, axis=-1, keepdims=True)
                     flow_y = np.mean(flow_y, axis=-1, keepdims=True)
                     flow = np.concatenate([flow_x, flow_y], axis=-1)
-                    flow = cv2.resize(flow, (w, h), interpolation=cv2.INTER_AREA)  # (h, w, 2)
+                    flow = cv2.resize(flow, target_size,
+                                      interpolation=cv2.INTER_AREA)
                     tensor['flow'].append(flow)
-            # load video name
+
             tensor['video'] = sample['video']
         except:
-            # print(sample['inp'])
             return None
         return tensor
+
+
 
     def replay_image_aug(self, tensor, transform):
         """

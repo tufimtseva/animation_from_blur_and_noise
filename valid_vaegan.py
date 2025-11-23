@@ -19,6 +19,8 @@ from torch.distributed.elastic.multiprocessing.errors import record
 from data.dataset import BAistPP as BDDataset
 loss_fn_alex = lpips.LPIPS(net='alex').to('cuda:0')
 import torchvision.utils as vutils
+# from NAFNet.basicsr.models import create_model
+
 from restormer_arch import Restormer
 
 import os
@@ -41,6 +43,31 @@ def validation(local_rank, d_configs, p_configs, num_sampling, logger):
     # model init
     d_model = MBD(local_rank=local_rank, configs=d_configs)
     p_model = GP(local_rank=local_rank, configs=p_configs)
+
+    # opt = {
+    #     'model_type': 'NAFNet',  # the class name inside NAFNet model file
+    #     'img_channel': 3,  # RGB images
+    #     'width': 32,  # width of the network
+    #     'middle_blk_num': 1,
+    #     'enc_blk_nums': [1, 1, 1, 1],
+    #     'dec_blk_nums': [1, 1, 1, 1],
+    #     'pretrained_path': 'pretrained_models/nafnet_sidd_width32.pth',
+    #     'device': f'cuda:{local_rank}'
+    # }
+    #
+    # denoiser = create_model(opt)
+    # checkpoint = torch.load(opt['pretrained_path'], map_location=opt['device'])
+    # denoiser.load_state_dict(checkpoint['params'], strict=False)
+    # denoiser = denoiser.to(opt['device']).eval()
+
+
+
+
+
+
+
+
+
 
 
     print("\n" + "=" * 60)
@@ -254,6 +281,14 @@ def evaluate(d_model, p_model, valid_loader, local_rank, num_sampling, logger, s
 
 @record
 def main():
+
+
+    # import os
+    # import torch
+    # print("Hostname:", os.uname()[1])
+    # print(torch.cuda.get_device_name(0))
+    # print(torch.cuda.get_device_properties(0).total_memory / 1024 ** 3, "GB")
+
     # load args & configs
     parser = ArgumentParser(description='Guidance prediction & Blur Decomposition')
     parser.add_argument('--local_rank', default=0, type=int, help='local rank')
