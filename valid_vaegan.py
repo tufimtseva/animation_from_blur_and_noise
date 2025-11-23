@@ -51,7 +51,7 @@ def validation(local_rank, d_configs, p_configs, num_sampling, logger):
         denoiser = Restormer(
             inp_channels=3,
             out_channels=3,
-            dim=24,
+            dim=48,
             num_blocks=[4, 6, 6, 8],
             num_refinement_blocks=4,
             heads=[1, 2, 4, 8],
