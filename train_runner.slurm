@@ -6,8 +6,11 @@
 #SBATCH --cpus-per-task=4
 #SBATCH --mem=33G
 #SBATCH --time=06:00:00
-#SBATCH --output=slurm-%j.out  # log file
+#SBATCH --output=slurm-%j.out
 #SBATCH --exclude=gpunode16
+
+export TORCH_DISTRIBUTED_DEBUG=DETAIL
+export PYTHONFAULTHANDLER=1
 
 # Load conda (adjust if needed)
 source ~/miniconda3/etc/profile.d/conda.sh

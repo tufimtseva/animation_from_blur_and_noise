@@ -16,6 +16,14 @@ from model.utils import AverageMeter
 from os.path import join
 from logger import Logger
 
+import sys
+import traceback
+
+def excepthook(type, value, tb):
+    traceback.print_exception(type, value, tb)
+    sys.exit(1)
+
+sys.excepthook = excepthook
 
 def init_seeds(seed=0):
     random.seed(seed)
