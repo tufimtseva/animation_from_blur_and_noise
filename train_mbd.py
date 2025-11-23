@@ -120,7 +120,12 @@ def train(local_rank, configs, log_dir):
             # Move to device
             tensor['inp'] = tensor['inp'].to(device)  # (b, 1, 3, h, w)
             tensor['gt'] = tensor['gt'].to(device)  # (b, num_gts, 3, h, w)
-            tensor['trend'] = tensor['trend'].to(device)  # (b, 1, 2, h, w)
+            # Handle trend - create dummy if not present (GoPro doesn't have trend)
+            if 'trend' in tensor and tensor['trend'] is not None:
+                tensor['trend'] = tensor['trend'].to(device)
+            else:
+                b, _, c, h, w = tensor['inp'].shape
+                tensor['trend'] = torch.zeros(b, 1, 2, h, w, device=device)
 
             # === NEW: Add noise augmentation ===
             b = tensor['inp'].size(0)
@@ -229,9 +234,14 @@ def evaluate(model, valid_loader, num_eval, local_rank, writer):
     # One epoch validation
     random_idx = random.randint(0, len(valid_loader) - 1)
     for i, tensor in enumerate(valid_loader):
-        tensor['inp'] = tensor['inp'].to(device)  # (b, 1, 3, h, w)
-        tensor['gt'] = tensor['gt'].to(device)  # (b, num_gts, 3, h, w)
-        tensor['trend'] = tensor['trend'].to(device)  # (b, 1, 2, h, w)
+        tensor['inp'] = tensor['inp'].to(device)
+        tensor['gt'] = tensor['gt'].to(device)
+        if 'trend' in tensor and tensor['trend'] is not None:
+            tensor['trend'] = tensor['trend'].to(device)
+        else:
+            b, _, c, h, w = tensor['inp'].shape
+            tensor['trend'] = torch.zeros(b, 1, 2, h, w, device=device)
+
         b = tensor['inp'].size(0)
 
         # === Test 1: Clean images ===
