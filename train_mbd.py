@@ -339,15 +339,7 @@ if __name__ == '__main__':
         configs = yaml.full_load(f)
 
     # Import blur decomposition dataset
-    is_gen_blur = True
-    for root_dir in configs['dataset_args']['root_dir']:
-        if 'b-aist++' in root_dir:
-            is_gen_blur = False
-    if is_gen_blur:
-        from data.dataset import GenBlur as BDDataset
-    else:
-        from data.dataset import BAistPP as BDDataset
-
+    from data.dataset import BAistPP as BDDataset
     # DDP init
     dist.init_process_group(backend="nccl")
     torch.cuda.set_device(args.local_rank)
