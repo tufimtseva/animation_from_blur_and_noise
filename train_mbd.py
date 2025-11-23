@@ -15,6 +15,7 @@ from model.MBD import MBD
 from model.utils import AverageMeter
 from os.path import join
 from logger import Logger
+import lpips  # NEW
 
 import sys
 import traceback
@@ -226,9 +227,14 @@ def evaluate(model, valid_loader, num_eval, local_rank, writer):
     loss_meter_noisy = AverageMeter()
     psnr_meter_clean = AverageMeter()
     ssim_meter_clean = AverageMeter()
+    lpips_meter_clean = AverageMeter()  # NEW
     psnr_meter_noisy = AverageMeter()
     ssim_meter_noisy = AverageMeter()
+    lpips_meter_noisy = AverageMeter()  # NEW
     time_stamp = time.time()
+
+    # NEW: Initialize LPIPS model (using AlexNet)
+    lpips_model = lpips.LPIPS(net='alex').to(device)
 
     # One epoch validation
     random_idx = random.randint(0, len(valid_loader) - 1)
@@ -260,9 +266,16 @@ def evaluate(model, valid_loader, num_eval, local_rank, writer):
             pred_imgs_clean.reshape(num_gts * b, c, h, w),
             gt_imgs.reshape(num_gts * b, c, h, w)
         )
+
+        # NEW: LPIPS for clean (expects values in [-1, 1] range)
+        pred_normalized = (pred_imgs_clean.reshape(num_gts * b, c, h, w) / 255.0) * 2 - 1
+        gt_normalized = (gt_imgs.reshape(num_gts * b, c, h, w) / 255.0) * 2 - 1
+        lpips_clean = lpips_model(pred_normalized, gt_normalized).mean()
+
         loss_meter_clean.update(loss_clean.item(), b)
         psnr_meter_clean.update(psnr_clean, num_gts * b)
         ssim_meter_clean.update(ssim_clean, num_gts * b)
+        lpips_meter_clean.update(lpips_clean.item(), num_gts * b)  # NEW
 
         # === Test 2: Noisy images (fixed sigma=15) ===
         inp_squeezed = tensor['inp'].squeeze(1) / 255.0  # Normalize to [0, 1]
@@ -291,9 +304,15 @@ def evaluate(model, valid_loader, num_eval, local_rank, writer):
             pred_imgs_noisy.reshape(num_gts * b, c, h, w),
             gt_imgs.reshape(num_gts * b, c, h, w)
         )
+
+        # NEW: LPIPS for noisy
+        pred_noisy_normalized = (pred_imgs_noisy.reshape(num_gts * b, c, h, w) / 255.0) * 2 - 1
+        lpips_noisy = lpips_model(pred_noisy_normalized, gt_normalized).mean()
+
         loss_meter_noisy.update(loss_noisy.item(), b)
         psnr_meter_noisy.update(psnr_noisy, num_gts * b)
         ssim_meter_noisy.update(ssim_noisy, num_gts * b)
+        lpips_meter_noisy.update(lpips_noisy.item(), num_gts * b)  # NEW
 
         # Record image results (from clean version)
         if rank == 0 and i == random_idx:
@@ -326,11 +345,14 @@ def evaluate(model, valid_loader, num_eval, local_rank, writer):
         writer.add_scalar('valid/psnr_noisy', psnr_meter_noisy.avg, num_eval)
         writer.add_scalar('valid/ssim_clean', ssim_meter_clean.avg, num_eval)
         writer.add_scalar('valid/ssim_noisy', ssim_meter_noisy.avg, num_eval)
-        msg = 'eval time: {:.1f}s | clean (noise=0): loss={:.5f}, psnr={:.2f}, ssim={:.4f} | noisy (noise=15): loss={:.5f}, psnr={:.2f}, ssim={:.4f}'
+        writer.add_scalar('valid/lpips_clean', lpips_meter_clean.avg, num_eval)  # NEW
+        writer.add_scalar('valid/lpips_noisy', lpips_meter_noisy.avg, num_eval)  # NEW
+
+        msg = 'eval time: {:.1f}s | clean (noise=0): loss={:.5f}, psnr={:.2f}, ssim={:.4f}, lpips={:.4f} | noisy (noise=15): loss={:.5f}, psnr={:.2f}, ssim={:.4f}, lpips={:.4f}'
         msg = msg.format(
             eval_time_interval,
-            loss_meter_clean.avg, psnr_meter_clean.avg, ssim_meter_clean.avg,
-            loss_meter_noisy.avg, psnr_meter_noisy.avg, ssim_meter_noisy.avg
+            loss_meter_clean.avg, psnr_meter_clean.avg, ssim_meter_clean.avg, lpips_meter_clean.avg,
+            loss_meter_noisy.avg, psnr_meter_noisy.avg, ssim_meter_noisy.avg, lpips_meter_noisy.avg
         )
         logger(msg, prefix='[valid]')
 
