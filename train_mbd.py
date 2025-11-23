@@ -15,7 +15,7 @@ from model.MBD import MBD
 from model.utils import AverageMeter
 from os.path import join
 from logger import Logger
-import lpips  # NEW
+import lpips
 
 import sys
 import traceback
@@ -345,8 +345,8 @@ def evaluate(model, valid_loader, num_eval, local_rank, writer):
         writer.add_scalar('valid/psnr_noisy', psnr_meter_noisy.avg, num_eval)
         writer.add_scalar('valid/ssim_clean', ssim_meter_clean.avg, num_eval)
         writer.add_scalar('valid/ssim_noisy', ssim_meter_noisy.avg, num_eval)
-        writer.add_scalar('valid/lpips_clean', lpips_meter_clean.avg, num_eval)  # NEW
-        writer.add_scalar('valid/lpips_noisy', lpips_meter_noisy.avg, num_eval)  # NEW
+        writer.add_scalar('valid/lpips_clean', lpips_meter_clean.avg, num_eval)
+        writer.add_scalar('valid/lpips_noisy', lpips_meter_noisy.avg, num_eval)
 
         msg = 'eval time: {:.1f}s | clean (noise=0): loss={:.5f}, psnr={:.2f}, ssim={:.4f}, lpips={:.4f} | noisy (noise=15): loss={:.5f}, psnr={:.2f}, ssim={:.4f}, lpips={:.4f}'
         msg = msg.format(
