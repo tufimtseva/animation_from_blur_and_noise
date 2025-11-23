@@ -13,3 +13,6 @@ checkpoints/
 dist
 build
 TEST.md
+slurm-*.out
+slurm-*.err
+*.slurm

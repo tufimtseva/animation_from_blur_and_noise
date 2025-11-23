@@ -115,7 +115,8 @@ def train(local_rank, configs, log_dir):
             # Update model
             tensor['inp'] = tensor['inp'].to(device)  # (b, 1, 3, h, w)
             tensor['gt'] = tensor['gt'].to(device)  # (b, num_gts, 3, h, w)
-            tensor['trend'] = tensor['trend'].to(device)  # (b, 1, 2, h, w)
+            if configs['dataset_args'].get('use_trend', False):
+                tensor['trend'] = tensor['trend'].to(device)  # (b, 1, 2, h, w)
             gt_flow_ratio = 1 - epoch / (configs['epoch'] - 1)
             hybrid_flag = np.random.choice(np.arange(0, 2), p=[1 - gt_flow_ratio, gt_flow_ratio])
             out_tensor = model.update(inp_tensor=tensor, hybrid_flag=hybrid_flag, training=True)
@@ -201,7 +202,8 @@ def evaluate(model, valid_loader, num_eval, local_rank, writer):
     for i, tensor in enumerate(valid_loader):
         tensor['inp'] = tensor['inp'].to(device)  # (b, 1, 3, h, w)
         tensor['gt'] = tensor['gt'].to(device)  # (b, num_gts, 3, h, w)
-        tensor['trend'] = tensor['trend'].to(device)  # (b, 1, 2, h, w)
+        if configs['dataset_args'].get('use_trend', False):
+            tensor['trend'] = tensor['trend'].to(device)  # (b, 1, 2, h, w)
         out_tensor = model.update(inp_tensor=tensor, training=False)
         pred_imgs = out_tensor['pred_imgs']  # pred_imgs shape (b, num_gts, 3, h, w)
         gt_imgs = out_tensor['gt_imgs']  # gt_imgs shape (b, num_gts, 3, h, w)

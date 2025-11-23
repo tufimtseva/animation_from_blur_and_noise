@@ -123,7 +123,7 @@ class BAistPP(Dataset):
             self.samples = self.samples[::temporal_step]
             print(f"Applied temporal subsampling with step={temporal_step}")
         
-        print(f"Total {set_type} samples: {len(self.samples)}")``
+        print(f"Total {set_type} samples: {len(self.samples)}")
 
     def gen_transform(self, aug_args):
         """
