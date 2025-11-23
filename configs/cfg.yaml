@@ -41,21 +41,11 @@ dataset_args:
   noise_level: 10
   aug_args:
     train:
-      image:
-        RandomCrop_1:
-          height: 256
-          width: 256
-      video:
-        RandomHorizontalFlip_1:
-          p: 0.5
-        RandomVerticalFlip_1:
-          p: 0.5
+      image: { }
+      video: { }
     valid:
-      image:
-        CenterCrop_1:
-          height: 256
-          width: 256
-      video: {}
+      image: { }
+      video: { }
 
 # Optimizer settings
 optimizer:
