@@ -35,17 +35,17 @@ dataset_args:
   num_fut: 0
   num_past: 0
   temporal_step: 1
-  use_trend: true
-  use_flow: true
+  use_trend: false
+  use_flow: false
   noisy: false
   noise_level: 10
   aug_args:
     train:
-      image: { }
-      video: { }
+      image: {}
+      video: {}
     valid:
-      image: { }
-      video: { }
+      image: {}
+      video: {}
 
 # Optimizer settings
 optimizer:
@@ -61,8 +61,8 @@ perc_ratio: 0.1
 
 # Flow estimator (for second stage)
 flow_estimator_args:
-  model_type: RAFT
-  ckpt_path: ./checkpoints/raft-things.pth
+  checkpoint: ./checkpoints/raft-things.pth
+  iters: 20
 
 # Trend embedder settings
 trend_embedder_args:
