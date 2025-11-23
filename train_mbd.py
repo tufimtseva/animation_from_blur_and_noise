@@ -208,8 +208,7 @@ def train(local_rank, configs, log_dir):
 
         # Ending of an epoch
         num_eval += 1
-        if num_eval % 5 == 0:
-            evaluate(model, valid_loader, num_eval, local_rank, writer)
+        evaluate(model, valid_loader, num_eval, local_rank, writer)
         if rank == 0:
             model.save_model(log_dir)
             if num_eval % 5 == 0:
@@ -327,7 +326,7 @@ def evaluate(model, valid_loader, num_eval, local_rank, writer):
         writer.add_scalar('valid/psnr_noisy', psnr_meter_noisy.avg, num_eval)
         writer.add_scalar('valid/ssim_clean', ssim_meter_clean.avg, num_eval)
         writer.add_scalar('valid/ssim_noisy', ssim_meter_noisy.avg, num_eval)
-        msg = 'eval time: {:.1f}s | clean: loss={:.5f}, psnr={:.2f}, ssim={:.4f} | noisy: loss={:.5f}, psnr={:.2f}, ssim={:.4f}'
+        msg = 'eval time: {:.1f}s | clean (noise=0): loss={:.5f}, psnr={:.2f}, ssim={:.4f} | noisy (noise=15): loss={:.5f}, psnr={:.2f}, ssim={:.4f}'
         msg = msg.format(
             eval_time_interval,
             loss_meter_clean.avg, psnr_meter_clean.avg, ssim_meter_clean.avg,
