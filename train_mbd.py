@@ -275,21 +275,8 @@ if __name__ == '__main__':
         configs = yaml.full_load(f)
     print(f"Config loaded, keys: {configs.keys()}", flush=True)
 
-    # Import blur decomposition dataset
-    print("Determining dataset type...", flush=True)
-    is_gen_blur = True
-    for root_dir in configs['dataset_args']['root_dir']:
-        print(f"Checking root_dir: {root_dir}", flush=True)
-        if 'b-aist++' in root_dir:
-            is_gen_blur = False
-    
-    print(f"is_gen_blur: {is_gen_blur}", flush=True)
-    if is_gen_blur:
-        print("Importing GenBlur dataset...", flush=True)
-        from data.dataset import GenBlur as BDDataset
-    else:
-        print("Importing BAistPP dataset...", flush=True)
-        from data.dataset import BAistPP as BDDataset
+    print("Using BAistPP dataset (modified for GoPro)...", flush=True)
+    from data.dataset import BAistPP as BDDataset
     print("Dataset class imported", flush=True)
 
     # DDP init
