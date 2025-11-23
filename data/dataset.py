@@ -31,128 +31,99 @@ class BAistPP(Dataset):
         trend: {:08d}_trend.npy (start from 00000000_trend.npy)
     """
 
-    # def __init__(self, set_type, root_dir, suffix, num_gts, num_fut, num_past, video_list, aug_args, use_trend=False,
-    #              temporal_step=1, use_flow=False,  noisy=False, **kwargs):
-    #     self.use_trend = use_trend
-    #     self.use_flow = use_flow
-    #     self.noisy = noisy
-    #     self.sigma = 10
-    #     self.img_transform, self.vid_transform = self.gen_transform(aug_args[set_type])
-    #     assert isinstance(root_dir, list) and isinstance(video_list, dict)
-    #     self.samples = []
-    #     for sub_dir in root_dir:
-    #         if sub_dir.endswith('/'):
-    #             sub_dir = sub_dir[:-1]
-    #         sub_list = video_list[basename(sub_dir)]
-    #         self.samples += self.gen_samples(sub_dir, sub_list[set_type], suffix, num_gts, num_fut, num_past)
-    #     self.samples = self.samples[::temporal_step]
-
-    # def __init__(self, set_type, root_dir, suffix, num_gts, num_fut, num_past,
-    #              video_list=None, aug_args=None, use_trend=False,
-    #              temporal_step=1,
-    #              use_flow=False, noisy=False, **kwargs):
-    #
-    #     self.use_trend = False  # GoPro has no trend
-    #     self.use_flow = False  # GoPro has no flow
-    #     self.noisy = noisy
-    #     self.sigma = 10
-    #
-    #     self.img_transform, self.vid_transform = self.gen_transform(
-    #         aug_args[set_type]
-    #     )
-    #
-    #     assert isinstance(root_dir, list)
-    #     self.samples = []
-    #
-    #     # Hard-coded list of test video folders
-    #     selected_test_videos = [
-    #         "GOPR0384_11_00", "GOPR0385_11_01", "GOPR0410_11_00",
-    #         "GOPR0862_11_00", "GOPR0869_11_00", "GOPR0881_11_01",
-    #         "GOPR0384_11_05", "GOPR0396_11_00", "GOPR0854_11_00",
-    #         "GOPR0868_11_00", "GOPR0871_11_00"
-    #     ]
-    #
-    #     print(f"[DEBUG] root_dir input: {root_dir}")
-    #     print(f"[DEBUG] Processing {len(selected_test_videos)} test videos")
-    #
-    #     # iterate only through test folders
-    #     for rdir in root_dir:
-    #         if rdir.endswith('/'):
-    #             rdir = rdir[:-1]
-    #
-    #         test_root = "/w/20251/tufimtseva/Gopro/test"
-    #         print(f"[DEBUG] Processing test_root: {test_root}")
-    #
-    #         try:
-    #             new_samples = self.gen_samples_gopro(
-    #                 test_root,
-    #                 selected_test_videos,
-    #                 suffix,
-    #                 num_gts,
-    #                 num_fut,
-    #                 num_past
-    #             )
-    #             print(
-    #                 f"[DEBUG] gen_samples returned {len(new_samples)} samples")
-    #             self.samples += new_samples
-    #         except Exception as e:
-    #             print(f"[WARN] Skipping {rdir}: {e}")
-    #             import traceback
-    #             traceback.print_exc()
-    #
-    #     print(
-    #         f"[DEBUG] Total samples before temporal step: {len(self.samples)}")
-    #     # temporal subsampling
-    #     self.samples = self.samples[::temporal_step]
-    #     print(f"[DEBUG] Total samples after temporal step: {len(self.samples)}")
-
     def __init__(self, set_type, root_dir, suffix, num_gts, num_fut, num_past,
-                 video_list=None, aug_args=None, use_trend=False,
-                 temporal_step=1,
-                 use_flow=False, noisy=False, noise_level = 10, **kwargs):
-
-        self.use_trend = False
-        self.use_flow = False
+             video_list=None, aug_args=None, use_trend=False,
+             temporal_step=1, use_flow=False, noisy=False, noise_level=10, **kwargs):
+        """
+        Initialize GoPro dataset for training or validation.
+        
+        Args:
+            set_type: 'train' or 'valid'
+            root_dir: list of root directories (e.g., ['/w/20251/mahikav/Gopro'])
+            suffix: image file extension (e.g., 'png')
+            num_gts: number of ground truth frames
+            num_fut: number of future frames (not used for GoPro)
+            num_past: number of past frames (not used for GoPro)
+            video_list: not used, kept for compatibility
+            aug_args: augmentation arguments
+            use_trend: whether to use trend (not available for GoPro)
+            temporal_step: temporal subsampling step
+            use_flow: whether to use flow (not available for GoPro)
+            noisy: whether to add noise to inputs
+            noise_level: sigma value for noise
+        """
+        self.use_trend = False  # GoPro doesn't have trend data
+        self.use_flow = False   # GoPro doesn't have flow data
         self.noisy = noisy
         self.sigma = noise_level
 
-        self.img_transform, self.vid_transform = self.gen_transform(
-            aug_args[set_type]
-        )
+        # Initialize image and video transforms
+        self.img_transform, self.vid_transform = self.gen_transform(aug_args[set_type])
 
-        assert isinstance(root_dir, list)
+        assert isinstance(root_dir, list), "root_dir must be a list"
         self.samples = []
 
-        selected_test_videos = [
-            "GOPR0384_11_00", "GOPR0385_11_01", "GOPR0410_11_00",
-            "GOPR0862_11_00", "GOPR0869_11_00", "GOPR0881_11_01",
-            "GOPR0384_11_05", "GOPR0396_11_00", "GOPR0854_11_00",
-            "GOPR0868_11_00", "GOPR0871_11_00"
-        ]
+        # Determine subdirectory and video list based on set_type
+        if set_type == 'train':
+            subdir = 'train'
+            selected_videos = [
+                "GOPR0372_07_00", "GOPR0372_07_01", "GOPR0374_11_00",
+                "GOPR0374_11_01", "GOPR0374_11_02", "GOPR0374_11_03",
+                "GOPR0378_13_00", "GOPR0379_11_00", "GOPR0380_11_00",
+                "GOPR0384_11_01", "GOPR0384_11_02", "GOPR0384_11_03",
+                "GOPR0384_11_04", "GOPR0385_11_00", "GOPR0386_11_00",
+                "GOPR0477_11_00", "GOPR0857_11_00", "GOPR0868_11_01",
+                "GOPR0868_11_02", "GOPR0871_11_01", "GOPR0881_11_00",
+                "GOPR0884_11_00"
+            ]
+        elif set_type == 'valid':
+            subdir = 'test'
+            selected_videos = [
+                "GOPR0384_11_00", "GOPR0385_11_01", "GOPR0410_11_00",
+                "GOPR0862_11_00", "GOPR0869_11_00", "GOPR0881_11_01",
+                "GOPR0384_11_05", "GOPR0396_11_00", "GOPR0854_11_00",
+                "GOPR0868_11_00", "GOPR0871_11_00"
+            ]
+        else:
+            raise ValueError(f"set_type must be 'train' or 'valid', got '{set_type}'")
 
+        print(f"Initializing {set_type} dataset from {subdir}/ with {len(selected_videos)} videos")
+
+        # Load samples from each root directory
         for rdir in root_dir:
+            # Remove trailing slash if present
             if rdir.endswith('/'):
                 rdir = rdir[:-1]
 
-            test_root = rdir + '/test'  # FIX: Append /test here
+            # Construct path to train/ or test/ subdirectory
+            data_root = f"{rdir}/{subdir}"
+            
+            if not os.path.exists(data_root):
+                print(f"[WARNING] Directory does not exist: {data_root}")
+                continue
 
             try:
                 new_samples = self.gen_samples_gopro(
-                    test_root,
-                    selected_test_videos,
+                    data_root,
+                    selected_videos,
                     suffix,
                     num_gts,
                     num_fut,
                     num_past
                 )
                 self.samples += new_samples
+                print(f"Added {len(new_samples)} samples from {data_root}")
             except Exception as e:
-                print(f"[ERROR] {e}")
+                print(f"[ERROR] Failed to load from {data_root}: {e}")
                 import traceback
                 traceback.print_exc()
 
-        self.samples = self.samples[::temporal_step]
-        print(f"[INFO] Loaded {len(self.samples)} samples")
+        # Apply temporal subsampling
+        if temporal_step > 1:
+            self.samples = self.samples[::temporal_step]
+            print(f"Applied temporal subsampling with step={temporal_step}")
+        
+        print(f"Total {set_type} samples: {len(self.samples)}")``
 
     def gen_transform(self, aug_args):
         """
@@ -165,158 +136,88 @@ class BAistPP(Dataset):
             vid_trasnform.append(getattr(A, key.split('_')[0])(**val))
         return A.Compose(img_transform), A.ComposeV(vid_trasnform)
 
-    def gen_samples_gopro(self, root_dir, video_list, suffix, num_gts, num_fut,
-                          num_past):
+    def gen_samples_gopro(self, root_dir, video_list, suffix, num_gts, num_fut, num_past):
+        """
+        Generate samples from GoPro dataset.
+        
+        Args:
+            root_dir: path to train/ or test/ directory
+            video_list: list of video folder names
+            suffix: image file extension
+            num_gts: number of ground truth frames per sample
+            num_fut: not used for GoPro
+            num_past: not used for GoPro
+        
+        Returns:
+            list of sample dictionaries
+        """
         samples = []
-        video_dirs = video_list if isinstance(video_list, list) else [
-            video_list]
+        video_dirs = video_list if isinstance(video_list, list) else [video_list]
 
         inp_fmt = '{:06d}.' + suffix
         gt_fmt = '{:06d}.' + suffix
-
-        print(f"[DEBUG] gen_samples_gopro called with root_dir={root_dir}")
-        print(f"[DEBUG] video_dirs={video_dirs}")
 
         for vid_dir in video_dirs:
             inp_dir_path = join(root_dir, vid_dir, 'blur')
             gt_dir_path = join(root_dir, vid_dir, 'sharp')
 
-            print(
-                f"[DEBUG] Checking {vid_dir}: inp={inp_dir_path}, exists={os.path.exists(inp_dir_path)}")
-
-            if not os.path.exists(inp_dir_path) or not os.path.exists(
-                    gt_dir_path):
-                print(f"[DEBUG] SKIP - directories don't exist")
+            # Check if directories exist
+            if not os.path.exists(inp_dir_path) or not os.path.exists(gt_dir_path):
+                print(f"Skipping {vid_dir}: directories not found")
                 continue
 
             try:
-                blur_imgs = sorted([item for item in os.listdir(inp_dir_path) if
-                                    item.endswith(suffix)])
-                sharp_imgs = sorted([item for item in os.listdir(gt_dir_path) if
-                                     item.endswith(suffix)])
+                # Get all blur and sharp images
+                blur_imgs = sorted([item for item in os.listdir(inp_dir_path) 
+                                if item.endswith(suffix)])
+                sharp_imgs = sorted([item for item in os.listdir(gt_dir_path) 
+                                    if item.endswith(suffix)])
 
-                print(
-                    f"[DEBUG] Found {len(blur_imgs)} blur, {len(sharp_imgs)} sharp")
-
-                blur_indices = sorted(
-                    [int(img.split('.')[0]) for img in blur_imgs])
-                sharp_indices = sorted(
-                    [int(img.split('.')[0]) for img in sharp_imgs])
+                # Extract frame indices
+                blur_indices = sorted([int(img.split('.')[0]) for img in blur_imgs])
+                sharp_indices = sorted([int(img.split('.')[0]) for img in sharp_imgs])
+                
             except Exception as e:
-                print(f"[DEBUG] EXCEPTION: {e}")
+                print(f"Error reading images from {vid_dir}: {e}")
                 continue
 
+            # Find indices that exist in both blur and sharp
             valid_indices = sorted(set(blur_indices) & set(sharp_indices))
-            print(f"[DEBUG] Valid indices: {len(valid_indices)}")
 
+            # Need at least 81 frames (40 before + 1 center + 40 after)
             if len(valid_indices) < 81:
-                print(f"[DEBUG] SKIP - not enough frames")
+                print(f"Skipping {vid_dir}: only {len(valid_indices)} frames (need 81+)")
                 continue
 
+            # Generate samples, skipping first and last 40 frames
             count = 0
             for i in range(40, len(valid_indices) - 40):
                 frame_num = valid_indices[i]
 
-                sample = {
-                    'inp': [],
-                    'gt': [],
-                    'inp_anno': [],
-                    'trend': [],
-                    'flow': [],
-                    'video': vid_dir
-                }
-
                 inp_path = join(inp_dir_path, inp_fmt.format(frame_num))
                 gt_path = join(gt_dir_path, gt_fmt.format(frame_num))
-                print(
-                    f"[DEBUG] Checking {inp_path}, exists={os.path.exists(inp_path)}")
-                print(
-                    f"[DEBUG] Checking {gt_path}, exists={os.path.exists(gt_path)}")
-                if exists(inp_path) and exists(gt_path):
-                    sample['inp'].append(inp_path)
-                    print("hio")
-                    sample['gt'] += [gt_path] * num_gts
-                    samples.append(sample)
-                    count += 1
+                
+                # Verify files exist
+                if not (exists(inp_path) and exists(gt_path)):
+                    continue
+                
+                # Create sample
+                sample = {
+                    'inp': [inp_path],
+                    'gt': [gt_path] * num_gts,  # Repeat gt path num_gts times
+                    'inp_anno': [],  # Not used for GoPro
+                    'trend': [],     # Not used for GoPro
+                    'flow': [],      # Not used for GoPro
+                    'video': vid_dir
+                }
+                
+                samples.append(sample)
+                count += 1
 
-            print(f"[DEBUG] Added {count} samples from {vid_dir}")
+            if count > 0:
+                print(f"  {vid_dir}: added {count} samples")
 
-        print(f"[DEBUG] TOTAL samples: {len(samples)}")
         return samples
-
-    # def gen_samples(self, root_dir, video_list, suffix, num_gts, num_fut, num_past):
-    #     """
-    #     Returned samples is a list of dicts, a sample is represented as a dict
-    #     sample['inp'] is a list of the file paths of temporally continuous input images
-    #     sample['inp_anno'] is a list of pkl file paths, the annotations for the input images
-    #     sample['gt'] is a list of the file paths of gt images for the corresponding blurry input image
-    #     sample['gt_anno'] is a list of pkl file paths, the annotations for the gt images
-    #     sample['trend'] is a list of npy file paths, the 1/2X trend guidance
-    #     sample['video'] is the name of the video dir that the sample belongs to
-    #     """
-    #     samples = []
-    #     if isinstance(video_list, list):
-    #         video_dirs = video_list
-    #     else:
-    #         with open(video_list) as f:
-    #             video_dirs = yaml.full_load(f)
-    #     inp_fmt = '{:08d}.' + suffix
-    #     gt_fmt = '{:08d}_{:03d}.' + suffix
-    #     inp_anno_fmt = '{:08d}.pkl'
-    #     trend_fmt = '{:08d}_trend.npy'
-    #     flow_fmt = '{:08d}_flow.npy'
-    #     for vid_dir in video_dirs:
-    #         inp_dir_path = join(root_dir, vid_dir, 'blur')
-    #         inp_anno_dir_path = join(root_dir, vid_dir, 'blur_anno')
-    #         gt_dir_path = join(root_dir, vid_dir, 'sharp')
-    #         trend_dir_path = join(root_dir, vid_dir, 'trend+_avg')
-    #         # trend_dir_path = join(root_dir, vid_dir, 'trend+')
-    #         flow_dir_path = join(root_dir, vid_dir, 'flow')
-    #         try:
-    #             imgs = [item for item in os.listdir(inp_dir_path) if item.endswith(suffix)]
-    #         except:
-    #             print("missing videos:", inp_dir_path)
-    #             continue
-    #         num_imgs = len(imgs)
-    #
-    #         range_start = num_past + 40
-    #         range_stop = num_imgs - num_fut - 40
-    #         if range_start >= range_stop:
-    #             continue
-    #
-    #         for frame in range(range_start, range_stop):
-    #             sample = {}
-    #             sample['inp'], sample['gt'], sample['inp_anno'], sample['trend'], sample['flow'] = [], [], [], [], []
-    #             aban_flag = False
-    #             for i in range(frame - num_past, frame + num_fut + 1):
-    #                 # if annotation does not exist, skip this sample by setting aban_flag as True
-    #                 # collect path of input and its annotation
-    #                 inp_anno_path = join(inp_anno_dir_path, inp_anno_fmt.format(i))
-    #                 if not exists(inp_anno_path):
-    #                     aban_flag = True
-    #                     break
-    #                 sample['inp_anno'].append(inp_anno_path)
-    #                 inp_path = join(inp_dir_path, inp_fmt.format(i))
-    #                 sample['inp'].append(inp_path)
-    #                 gt_paths = [join(gt_dir_path, gt_fmt.format(i, j)) for j in range(num_gts)]
-    #                 sample['gt'] += gt_paths
-    #
-    #                 if self.use_trend:
-    #                     # collect trend guidance
-    #                     trend_path = join(trend_dir_path, trend_fmt.format(i))
-    #                     sample['trend'].append(trend_path)
-    #
-    #                 if self.use_flow:
-    #                     # collect optical flow
-    #                     flow_path = join(flow_dir_path, flow_fmt.format(i))
-    #                     sample['flow'].append(flow_path)
-    #
-    #             if aban_flag:
-    #                 continue
-    #             else:
-    #                 sample['video'] = vid_dir
-    #                 samples.append(sample)
-    #     return samples
 
 
     def check_samples(self, miss_file_list_path=None):
