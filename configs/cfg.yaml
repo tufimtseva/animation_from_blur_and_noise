@@ -45,7 +45,7 @@ decomposer_s2_args:
   trans_up: true
 
 # Training settings
-epoch: 10
+epoch: 100
 num_iterations: 1
 num_workers: 4
 train_batch_size: 1

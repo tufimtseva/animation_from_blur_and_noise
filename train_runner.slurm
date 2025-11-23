@@ -5,7 +5,7 @@
 #SBATCH --gres=gpu:1
 #SBATCH --cpus-per-task=4
 #SBATCH --mem=33G
-#SBATCH --time=06:00:00
+#SBATCH --time=30:00:00
 #SBATCH --output=slurm-%j.out
 #SBATCH --exclude=gpunode16
 
@@ -21,7 +21,7 @@ cd ~/animation_from_blur_and_noise
 
 torchrun --nproc_per_node=1 train_mbd.py \
   --config ./configs/cfg.yaml \
-  --log_dir ./log \
+  --log_dir /w/20251/shreyashree/log \
   --verbose
 
 #torchrun  train_mbd.py \

@@ -11,9 +11,8 @@ from model.embedder import get_embedder
 from model.utils import ckpt_convert, Vgg19
 from torch.nn.parallel import DistributedDataParallel as DDP
 
-
 class NoiseEstimationBranch(nn.Module):
-    """Tiny network to estimate noise level from blurry input image"""
+    """Tiny network to estimate noise level from blurry input image!"""
 
     def __init__(self):
         super().__init__()
@@ -41,57 +40,56 @@ class NoiseEstimationBranch(nn.Module):
         return noise_level
 
 
-class NoiseAwareDecomposer(nn.Module):
+class NoiseModulatedDecomposer(nn.Module):
     """
-    Wrapper around Decomposer that adds noise-aware feature modulation
+    Wraps a Decomposer and adds FiLM-style noise-aware feature modulation
     """
 
-    def __init__(self, base_decomposer, stage_name='s1'):
+    def __init__(self, base_decomposer, feature_channels):
         super().__init__()
-        self.base_decomposer = base_decomposer
-        self.stage_name = stage_name
+        self.decomposer = base_decomposer
+        self.feature_channels = feature_channels
 
-        # Feature modulation layers (FiLM-style)
-        # Assuming the decomposer has features after first conv - adjust channel count if needed
-        # You may need to adjust 64 based on your decomposer architecture
-        self.feature_channels = 64
-        self.gamma_layer = nn.Linear(1, self.feature_channels)  # Scale
-        self.beta_layer = nn.Linear(1, self.feature_channels)  # Shift
+        # FiLM modulation layers
+        self.gamma_layer = nn.Linear(1, feature_channels)  # Scale
+        self.beta_layer = nn.Linear(1, feature_channels)  # Shift
 
-    def forward(self, x, noise_level=None):
+        # Store noise level for this forward pass
+        self.current_noise_level = None
+
+        # Register forward hook on first_conv to apply FiLM modulation
+        self.decomposer.first_conv.register_forward_hook(self._film_hook)
+
+    def set_noise_level(self, noise_level):
+        """Store noise level for the next forward pass"""
+        self.current_noise_level = noise_level
+
+    def _film_hook(self, module, input, output):
         """
-        Args:
-            x: Input tensor
-            noise_level: Noise level for modulation (B, 1)
-        Returns:
-            Output from base decomposer with noise-aware modulation
+        Forward hook that applies FiLM modulation to features
+        This is called automatically after first_conv
         """
-        # If noise_level not provided, assume clean (no modulation)
-        if noise_level is None:
-            return self.base_decomposer(x)
+        if self.current_noise_level is None:
+            return output  # No modulation
 
-        # This is a simplified approach - ideally you'd hook into the decomposer's
-        # internal features. For now, we apply modulation at input level
-        # You may need to modify this based on your Decomposer architecture
+        B = self.current_noise_level.size(0)
+        # Compute gamma and beta from noise level
+        gamma = self.gamma_layer(self.current_noise_level).view(B, self.feature_channels, 1, 1)
+        beta = self.beta_layer(self.current_noise_level).view(B, self.feature_channels, 1, 1)
 
-        # Compute modulation parameters
-        B = noise_level.size(0)
-        gamma = self.gamma_layer(noise_level).view(B, self.feature_channels, 1, 1)
-        beta = self.beta_layer(noise_level).view(B, self.feature_channels, 1, 1)
+        # Apply FiLM: modulated_features = gamma * features + beta
+        modulated_output = gamma * output + beta
 
-        # Store for potential use in decomposer
-        self.gamma = gamma
-        self.beta = beta
+        return modulated_output
 
-        # Forward through base decomposer
-        # Note: For full FiLM, you'd need to modify Decomposer internals
-        # This is a placeholder - the actual modulation happens in modified Decomposer
-        return self.base_decomposer(x)
+    def forward(self, x):
+        """Forward pass through the decomposer with FiLM modulation applied via hook"""
+        return self.decomposer(x)
 
 
 class MBD:
     """
-    Multimodal blur decomposition with Noise-Aware Feature Modulation
+    Multimodal blur decomposition with Noise-Aware Feature Modulation (FiLM)
     """
 
     def __init__(self, local_rank, configs):
@@ -141,15 +139,25 @@ class MBD:
             configs['decomposer_s2_args']['in_channels'] += self.num_gts * 3
 
         # Create base decomposers
-        self.decomposer_s1 = Decomposer(**configs['decomposer_s1_args'])
-        self.decomposer_s2 = Decomposer(**configs['decomposer_s2_args'])
+        base_decomposer_s1 = Decomposer(**configs['decomposer_s1_args'])
+        base_decomposer_s2 = Decomposer(**configs['decomposer_s2_args'])
 
-        # NEW: Add noise estimation branch
+        # NEW: Wrap decomposers with noise-aware FiLM modulation
         if self.use_noise_aware:
             self.noise_estimator = NoiseEstimationBranch()
             self.noise_estimator.to(device=self.device)
-            print("[MBD] Noise-aware feature modulation ENABLED")
+
+            # Get feature channels from config
+            feature_channels = configs['decomposer_s1_args']['block_expansion']
+
+            # Wrap both decomposers with FiLM modulation
+            self.decomposer_s1 = NoiseModulatedDecomposer(base_decomposer_s1, feature_channels)
+            self.decomposer_s2 = NoiseModulatedDecomposer(base_decomposer_s2, feature_channels)
+
+            print(f"[MBD] ✓ Noise-aware FiLM modulation ENABLED (feature_channels={feature_channels})")
         else:
+            self.decomposer_s1 = base_decomposer_s1
+            self.decomposer_s2 = base_decomposer_s2
             self.noise_estimator = None
             print("[MBD] Noise-aware feature modulation DISABLED")
 
@@ -195,40 +203,30 @@ class MBD:
             self.noise_loss_weight = configs['noise_loss_weight']
 
     def train(self):
-        """
-        Open training mode
-        """
+        """Open training mode"""
         self.decomposer_s1.train()
         self.decomposer_s2.train()
         if self.use_noise_aware:
             self.noise_estimator.train()
 
     def eval(self):
-        """
-        Open evaluating mode
-        """
+        """Open evaluating mode"""
         self.decomposer_s1.eval()
         self.decomposer_s2.eval()
         if self.use_noise_aware:
             self.noise_estimator.eval()
 
     def scheduler_step(self):
-        """
-        Update scheduler after each epoch
-        """
+        """Update scheduler after each epoch"""
         self.scheduler.step()
 
     def get_lr(self):
-        """
-        Get learning rate
-        """
+        """Get learning rate"""
         for param_group in self.optimizer.param_groups:
             return param_group['lr']
 
     def load_model(self, log_dir, device, name=None):
-        """
-        Load checkpoints for decomposer_s1 and decomposer_s2
-        """
+        """Load checkpoints for decomposer_s1, decomposer_s2, and noise_estimator"""
         if name is None:
             self.decomposer_s1.load_state_dict(
                 ckpt_convert(torch.load(join(log_dir, 'decomposer_s1.pth'), map_location=device)))
@@ -238,9 +236,9 @@ class MBD:
                 try:
                     self.noise_estimator.load_state_dict(
                         ckpt_convert(torch.load(join(log_dir, 'noise_estimator.pth'), map_location=device)))
-                    print("[MBD] Loaded noise estimator checkpoint")
+                    print("[MBD] ✓ Loaded noise estimator checkpoint")
                 except:
-                    print("[MBD] No noise estimator checkpoint found, starting from scratch")
+                    print("[MBD] ⚠ No noise estimator checkpoint found, starting from scratch")
         else:
             self.decomposer_s1.load_state_dict(
                 ckpt_convert(torch.load(join(log_dir, 'decomposer_s1_{}.pth'.format(name)), map_location=device)))
@@ -251,14 +249,12 @@ class MBD:
                     self.noise_estimator.load_state_dict(
                         ckpt_convert(
                             torch.load(join(log_dir, 'noise_estimator_{}.pth'.format(name)), map_location=device)))
-                    print("[MBD] Loaded noise estimator checkpoint")
+                    print("[MBD] ✓ Loaded noise estimator checkpoint")
                 except:
-                    print("[MBD] No noise estimator checkpoint found, starting from scratch")
+                    print("[MBD] ⚠ No noise estimator checkpoint found, starting from scratch")
 
     def save_model(self, log_dir, name=None):
-        """
-        Save checkpoints for decomposer_s1 and decomposer_s2
-        """
+        """Save checkpoints for decomposer_s1, decomposer_s2, and noise_estimator"""
         if name is None:
             torch.save(self.decomposer_s1.state_dict(), join(log_dir, 'decomposer_s1.pth'))
             torch.save(self.decomposer_s2.state_dict(), join(log_dir, 'decomposer_s2.pth'))
@@ -273,13 +269,7 @@ class MBD:
     def update(self, inp_tensor, hybrid_flag=0, training=True):
         """
         Forward propagation, and backward propagation (if training == True) for a batch of data
-        If hybrid_flag is 1, use gt-flow as input in second stage instead of predicted one in the first stage
-        Shape of blur_img is (b, 1, 3, h, w), val range from 0~255
-        Shape of sharp_imgs is (b, num_gts, 3, h, w), val range from 0~255
-        shape of trend is (b, 1, 2, h, w), val -1. or 1.
-        Return pred_imgs of last iteration as shape of (b, num_gts, 3, h, w)
         """
-
         # Preparation
         if training:
             self.train()
@@ -383,24 +373,29 @@ class MBD:
     def first_stage(self, blur_img, trend_img, noise_level=None):
         """
         :param blur_img: blurry image (b, c, h, w), c = 3
-        :param trend_img: blurry image (b, tc, h, w), tc = 2
+        :param trend_img: trend guidance (b, tc, h, w), tc = 2
         :param noise_level: estimated noise level (b, 1)
         :return: sharp image sequence (b, num_gts, c, h, w)
         """
+        # NEW: Set noise level for FiLM modulation
+        if self.use_noise_aware and hasattr(self.decomposer_s1, 'module'):
+            # DDP wrapped
+            self.decomposer_s1.module.set_noise_level(noise_level)
+        elif self.use_noise_aware and hasattr(self.decomposer_s1, 'set_noise_level'):
+            # Not DDP wrapped
+            self.decomposer_s1.set_noise_level(noise_level)
+
         if not self.use_trend:
-            # Simple pass-through for now
             return self.decomposer_s1(blur_img)
 
         num_gts = self.configs['dataset_args']['num_gts']
         b, tc, h, w = trend_img.shape
-        trend_static = torch.zeros(b, 1, h, w).to(self.device)  # (0, 0) black
+        trend_static = torch.zeros(b, 1, h, w).to(self.device)
         trend_static[(trend_img[:, 0:1] == 0) & (trend_img[:, 1:2] == 0)] = 1
-        trend_static = trend_static.unsqueeze(dim=1)  # (b, 1, 1, h, w)
-        trend_dynamic = 1 - trend_static  # (b, 1, 1, h, w)
+        trend_static = trend_static.unsqueeze(dim=1)
+        trend_dynamic = 1 - trend_static
 
-        inp_img = torch.cat([blur_img, trend_img], dim=1)  # shape (b, 5, h, w)
-
-        # For now, the noise estimator learns implicitly through the gradients
+        inp_img = torch.cat([blur_img, trend_img], dim=1)
         pred_imgs = trend_dynamic * self.decomposer_s1(inp_img)
         pred_imgs += trend_static * blur_img.unsqueeze(dim=1).repeat(1, num_gts, 1, 1, 1)
         torch.cuda.synchronize()
@@ -413,17 +408,24 @@ class MBD:
         :param noise_level: estimated noise level (b, 1)
         :return: predicted images after refinement (b, num_gts, c, h, w)
         """
-        b, num_gts, c, h, w = pred_imgs.shape
+        # NEW: Set noise level for FiLM modulation
+        if self.use_noise_aware and hasattr(self.decomposer_s2, 'module'):
+            # DDP wrapped
+            self.decomposer_s2.module.set_noise_level(noise_level)
+        elif self.use_noise_aware and hasattr(self.decomposer_s2, 'set_noise_level'):
+            # Not DDP wrapped
+            self.decomposer_s2.set_noise_level(noise_level)
 
+        b, num_gts, c, h, w = pred_imgs.shape
         tensor_inp = [blur_img, ]
 
         if self.s1_to_s2:
             tensor_inp.append(pred_imgs.reshape(b, num_gts * c, h, w))
 
         if self.flow_to_s2:
-            ref_imgs = pred_imgs[:, :-1]  # (b, num_gts - 1, c, h, w)
+            ref_imgs = pred_imgs[:, :-1]
             ref_imgs = self.val_range * ref_imgs.reshape(b * (num_gts - 1), c, h, w)
-            tgt_imgs = pred_imgs[:, 1:]  # (b, num_gts - 1, c, h, w)
+            tgt_imgs = pred_imgs[:, 1:]
             tgt_imgs = self.val_range * tgt_imgs.reshape(b * (num_gts - 1), c, h, w)
             flows = self.flow_estimator.batch_multi_inference(ref_imgs=ref_imgs, tgt_imgs=tgt_imgs)
             flows = flows.reshape(b, (num_gts - 1), 2, h, w)
@@ -438,21 +440,21 @@ class MBD:
     @torch.no_grad()
     def inference(self, blur_img, trend, num_iters=0, full_results=False):
         """
-        :param blur_img: blurry image (h, w, 3), tensor read by cv2.imread(), 0~255, RGB
+        :param blur_img: blurry image (h, w, 3), 0~255, RGB
         :param trend: flow trend guidance (2, ) or (h, w, 2)
         :return: predicted images (num_gts, h, w, 3)
         """
         self.eval()
         h, w, _ = blur_img.shape
         blur_img = torch.from_numpy(blur_img).float().to(self.device)
-        blur_img = blur_img.permute(2, 0, 1).unsqueeze(dim=0) / self.val_range  # (1, 3, h, w)
+        blur_img = blur_img.permute(2, 0, 1).unsqueeze(dim=0) / self.val_range
 
         if len(trend.shape) == 1:
             trend = torch.from_numpy(trend).float().to(self.device)
-            trend = trend[None, None, None].repeat(1, h, w, 1).permute(0, 3, 1, 2)  # (1, 2, h ,w)
+            trend = trend[None, None, None].repeat(1, h, w, 1).permute(0, 3, 1, 2)
         elif len(trend.shape) == 3:
             trend = torch.from_numpy(trend).float().to(self.device)
-            trend = trend[None].permute(0, 3, 1, 2)  # (1, 2, h ,w)
+            trend = trend[None].permute(0, 3, 1, 2)
         else:
             raise NotImplementedError
 
@@ -474,15 +476,14 @@ class MBD:
             pred_imgs_s1 = pred_imgs_s2
         if num_iters == 0:
             pred_imgs_s2 = pred_imgs_s1
-        pred_imgs_s2 = pred_imgs_s2.squeeze(dim=0)  # (num_gts, 3, h, w)
+        pred_imgs_s2 = pred_imgs_s2.squeeze(dim=0)
         pred_imgs_s2 = torch.clamp(pred_imgs_s2 * self.val_range, 0, 255)
-        pred_imgs_s2 = pred_imgs_s2.permute(0, 2, 3, 1).detach().cpu().numpy().astype(np.uint8)  # (num_gts, h, w, 3)
+        pred_imgs_s2 = pred_imgs_s2.permute(0, 2, 3, 1).detach().cpu().numpy().astype(np.uint8)
 
         if not full_results:
             return pred_imgs_s2
         else:
-            pred_imgs_s1 = pred_imgs_s1.squeeze(dim=0)  # (num_gts, 3, h, w)
+            pred_imgs_s1 = pred_imgs_s1.squeeze(dim=0)
             pred_imgs_s1 = torch.clamp(pred_imgs_s1 * self.val_range, 0, 255)
-            pred_imgs_s1 = pred_imgs_s1.permute(0, 2, 3, 1).detach().cpu().numpy().astype(
-                np.uint8)  # (num_gts, h, w, 3)
+            pred_imgs_s1 = pred_imgs_s1.permute(0, 2, 3, 1).detach().cpu().numpy().astype(np.uint8)
             return pred_imgs_s2, pred_imgs_s1

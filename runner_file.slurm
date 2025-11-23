@@ -5,7 +5,7 @@
 #SBATCH --gres=gpu:1           # request 1 GPU
 #SBATCH --cpus-per-task=4
 #SBATCH --mem=33G
-#SBATCH --time=02:00:00
+#SBATCH --time=06:00:00
 #SBATCH --output=slurm-%j.out  # log file
 #SBATCH --exclude=gpunode16
 
@@ -24,7 +24,7 @@ conda activate animation-from-blur
 # Run the evaluation script
 torchrun  valid_vaegan.py \
   --predictor_resume_dir ./checkpoints/baistpp_cvaegan_gumble_celoss_z4/ \
-  --decomposer_resume_dir ./checkpoints/baistpp_mbd_2s_residual/ \
+  --decomposer_resume_dir /w/20251/shreyashree/log \
   --data_dir /w/20251/shreyashree/Gopro \
   -ns 1 \
   --verbose

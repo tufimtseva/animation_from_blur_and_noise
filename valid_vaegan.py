@@ -44,31 +44,6 @@ def validation(local_rank, d_configs, p_configs, num_sampling, logger):
     d_model = MBD(local_rank=local_rank, configs=d_configs)
     p_model = GP(local_rank=local_rank, configs=p_configs)
 
-    # opt = {
-    #     'model_type': 'NAFNet',  # the class name inside NAFNet model file
-    #     'img_channel': 3,  # RGB images
-    #     'width': 32,  # width of the network
-    #     'middle_blk_num': 1,
-    #     'enc_blk_nums': [1, 1, 1, 1],
-    #     'dec_blk_nums': [1, 1, 1, 1],
-    #     'pretrained_path': 'pretrained_models/nafnet_sidd_width32.pth',
-    #     'device': f'cuda:{local_rank}'
-    # }
-    #
-    # denoiser = create_model(opt)
-    # checkpoint = torch.load(opt['pretrained_path'], map_location=opt['device'])
-    # denoiser.load_state_dict(checkpoint['params'], strict=False)
-    # denoiser = denoiser.to(opt['device']).eval()
-
-
-
-
-
-
-
-
-
-
 
     print("\n" + "=" * 60)
     print("Loading Restormer Denoiser...")
@@ -114,12 +89,18 @@ def validation(local_rank, d_configs, p_configs, num_sampling, logger):
     # dataset init
     dataset_args = d_configs['dataset_args']
 
+    for noise_level in [0, 5, 10, 20]:
+        print(f"[INFO] Testing with noise_level={noise_level}")
 
-    valid_dataset = BDDataset(set_type='valid', noisy=True, noise_level=20, **dataset_args)
-    valid_loader = DataLoader(valid_dataset,
-                              batch_size=1,
-                              num_workers=0,
-                              pin_memory=True)
+        dataset_args_override = dataset_args.copy()
+        dataset_args_override['noisy'] = (noise_level > 0)
+        dataset_args_override['noise_level'] = noise_level
+
+        valid_dataset = BDDataset(set_type='valid', **dataset_args_override)
+        valid_loader = DataLoader(valid_dataset,
+                                  batch_size=1,
+                                  num_workers=d_configs['num_workers'],
+                                  pin_memory=True)
 
     evaluate(d_model, p_model, valid_loader, local_rank, num_sampling, logger, valid_dataset.sigma, denoiser)
 
@@ -165,30 +146,6 @@ def evaluate(d_model, p_model, valid_loader, local_rank, num_sampling, logger, s
         # Restore the expected shape: (b, 3, h, w) -> (b, 1, 3, h, w)
         tensor['inp'] = denoised_blur.unsqueeze(1)
 
-        # # Move to CPU for denoising
-        # blurry_cpu = blurry_input.cpu()
-        #
-        # if blurry_cpu.max() > 1.0:
-        #     blurry_cpu = blurry_cpu / 255.0
-        #     needs_denorm = True
-        # else:
-        #     needs_denorm = False
-        #
-        # # Denoise on CPU (slower but saves GPU memory)
-        # denoised_blur = denoiser.cpu()(blurry_cpu)
-        #
-        # if needs_denorm:
-        #     denoised_blur = denoised_blur * 255.0
-        #
-        # # Move back to GPU
-        # denoised_blur = denoised_blur.to(device)
-        # tensor['inp'] = denoised_blur.unsqueeze(1)
-        #
-        # # Move denoiser back to GPU for next iteration
-        # denoiser = denoiser.cuda(local_rank)
-
-
-        # Optional: Print debug info for first batch
         if i == 0:
             print(
                 f"\n[Denoising] Input range: [{blurry_input.min():.2f}, {blurry_input.max():.2f}]")
@@ -281,14 +238,6 @@ def evaluate(d_model, p_model, valid_loader, local_rank, num_sampling, logger, s
 
 @record
 def main():
-
-
-    # import os
-    # import torch
-    # print("Hostname:", os.uname()[1])
-    # print(torch.cuda.get_device_name(0))
-    # print(torch.cuda.get_device_properties(0).total_memory / 1024 ** 3, "GB")
-
     # load args & configs
     parser = ArgumentParser(description='Guidance prediction & Blur Decomposition')
     parser.add_argument('--local_rank', default=0, type=int, help='local rank')
