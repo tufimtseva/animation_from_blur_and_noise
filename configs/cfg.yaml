@@ -81,7 +81,6 @@ scheduler:
 trend_embedder_args:
   i: -1
   multires: 5
-
 flow_embedder_args:
   i: -1
   multires: 5
