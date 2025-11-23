@@ -1,0 +1,91 @@
+# GoPro Training Config for MBD with Noise-Aware Training
+
+# Dataset settings
+dataset_args:
+  aug_args:
+    train:
+      image: {}
+      video: {}
+    valid:
+      image: {}
+      video: {}
+  num_fut: 0
+  num_gts: 7
+  num_past: 0
+  root_dir:
+    - /w/20251/shreyashree/Gopro
+  suffix: png
+  use_trend: true
+  use_flow: true
+  noisy: false
+  noise_level: 10
+
+# Decomposer Stage 1 settings
+decomposer_s1_args:
+  block_expansion: 128
+  conv_down: true
+  in_channels: 3
+  max_features: 512
+  norm_type: batch
+  num_bottleneck_blocks: 12
+  num_down_blocks: 2
+  out_channels: 21
+  trans_up: true
+
+# Decomposer Stage 2 settings
+decomposer_s2_args:
+  block_expansion: 128
+  conv_down: true
+  in_channels: 3
+  max_features: 512
+  norm_type: batch
+  num_bottleneck_blocks: 12
+  num_down_blocks: 2
+  out_channels: 21
+  trans_up: true
+
+# Training settings
+epoch: 10
+num_iterations: 1
+num_workers: 4
+train_batch_size: 1
+valid_batch_size: 1
+val_range: 255.0
+
+# Model settings
+hybrid: false
+residual: true
+flow_to_s2: false
+s1_to_s2: true
+use_trend: false
+
+# Noise-aware training settings
+use_noise_aware: true
+noise_loss_weight: 0.1
+noise_aug_prob: 0.45
+noise_sigma_range: [5, 25]
+
+# Resume from checkpoint (set to null to train from scratch)
+resume_dir: null
+
+# Optimizer settings
+optimizer:
+  lr: 0.0001
+  weight_decay: 0.0001
+
+# Scheduler settings
+scheduler:
+  eta_min: 1.0e-06
+
+# Embedder settings
+trend_embedder_args:
+  i: -1
+  multires: 5
+flow_embedder_args:
+  i: -1
+  multires: 5
+
+# Flow estimator (for second stage)
+flow_estimator_args:
+  checkpoint: ./checkpoints/raft-sintel.pth
+  iters: 30
