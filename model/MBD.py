@@ -11,7 +11,6 @@ from model.embedder import get_embedder
 from model.utils import ckpt_convert, Vgg19
 from torch.nn.parallel import DistributedDataParallel as DDP
 
-
 class NoiseEstimationBranch(nn.Module):
     """Tiny network to estimate noise level from blurry input image"""
 
