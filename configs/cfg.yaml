@@ -1,0 +1,97 @@
+# GoPro Training Config for MBD with Noise-Aware Training
+
+# Training settings
+epoch: 100
+train_batch_size: 4
+valid_batch_size: 4
+num_workers: 4
+val_range: 255
+num_iterations: 1
+
+# Model settings
+hybrid: true
+residual: true
+residual_blur: false
+flow_to_s2: true
+s1_to_s2: false
+use_trend: false  # GoPro doesn't have trend data
+
+# Noise-aware training settings
+use_noise_aware: true
+noise_loss_weight: 0.1
+noise_aug_prob: 0.45
+noise_sigma_range: [5, 25]
+
+# Resume from checkpoint (set to null to train from scratch)
+resume_dir: null
+# resume_dir: ./checkpoints/baistpp_mbd_2s_residual/
+
+# Dataset settings
+dataset_args:
+  root_dir:
+    - /w/20251/shreyashree/Gopro
+  suffix: png
+  num_gts: 7
+  num_fut: 0
+  num_past: 0
+  temporal_step: 1
+  use_trend: false
+  use_flow: false
+  noisy: false
+  noise_level: 10
+  aug_args:
+    train:
+      image:
+        RandomCrop_1:
+          size: [256, 256]
+      video:
+        RandomHorizontalFlip_1:
+          p: 0.5
+        RandomVerticalFlip_1:
+          p: 0.5
+    valid:
+      image:
+        CenterCrop_1:
+          size: [256, 256]
+      video: {}
+
+# Optimizer settings
+optimizer:
+  lr: 0.0001
+  weight_decay: 0.01
+
+# Scheduler settings
+scheduler:
+  eta_min: 0.000001
+
+# Perceptual loss ratio (0 = disabled)
+perc_ratio: 0.1
+
+# Flow estimator (for second stage)
+flow_estimator_args:
+  model_type: RAFT
+  ckpt_path: ./checkpoints/raft-things.pth
+
+# Trend embedder settings
+trend_embedder_args:
+  multires: 4
+  input_dims: 2
+
+# Flow embedder settings
+flow_embedder_args:
+  multires: 4
+  input_dims: 2
+
+# Decomposer Stage 1 settings
+decomposer_s1_args:
+  in_channels: 3  # Will be modified if use_trend is true
+  out_channels: 21  # num_gts * 3 = 7 * 3
+  num_resblocks: 8
+  num_channels: 64
+
+# Decomposer Stage 2 settings
+decomposer_s2_args:
+  in_channels: 3  # Will be modified based on flow_to_s2 and s1_to_s2
+  out_channels: 21  # num_gts * 3 = 7 * 3
+  num_resblocks: 8
+  num_channels: 64

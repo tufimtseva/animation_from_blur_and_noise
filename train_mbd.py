@@ -20,7 +20,7 @@ import sys
 import traceback
 
 def excepthook(type, value, tb):
-    traceback.print_exception(type, value, tb)
+    traceback.print_exception(type, value, tb)r
     sys.exit(1)
 
 sys.excepthook = excepthook

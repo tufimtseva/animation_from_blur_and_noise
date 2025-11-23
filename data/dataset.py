@@ -109,7 +109,7 @@ class BAistPP(Dataset):
     def __init__(self, set_type, root_dir, suffix, num_gts, num_fut, num_past,
                  video_list=None, aug_args=None, use_trend=False,
                  temporal_step=1,
-                 use_flow=False, noisy=False, noise_level = 10, **kwargs):
+                 use_flow=False, noisy=False, noise_level=10, **kwargs):
 
         self.use_trend = False
         self.use_flow = False
@@ -123,23 +123,60 @@ class BAistPP(Dataset):
         assert isinstance(root_dir, list)
         self.samples = []
 
-        selected_test_videos = [
-            "GOPR0384_11_00", "GOPR0385_11_01", "GOPR0410_11_00",
-            "GOPR0862_11_00", "GOPR0869_11_00", "GOPR0881_11_01",
-            "GOPR0384_11_05", "GOPR0396_11_00", "GOPR0854_11_00",
-            "GOPR0868_11_00", "GOPR0871_11_00"
+        # Define train and test video lists (from your actual GoPro folder)
+        train_videos = [
+            "GOPR0372_07_00", "GOPR0372_07_01", "GOPR0374_11_00",
+            "GOPR0374_11_01", "GOPR0374_11_02", "GOPR0374_11_03",
+            "GOPR0378_13_00", "GOPR0379_11_00", "GOPR0380_11_00",
+            "GOPR0384_11_01", "GOPR0384_11_02", "GOPR0384_11_03",
+            "GOPR0384_11_04", "GOPR0385_11_00", "GOPR0386_11_00",
+            "GOPR0477_11_00", "GOPR0857_11_00", "GOPR0868_11_01",
+            "GOPR0868_11_02", "GOPR0871_11_01", "GOPR0881_11_00",
+            "GOPR0884_11_00"
         ]
+
+        test_videos = [
+            "GOPR0384_11_00", "GOPR0384_11_05", "GOPR0385_11_01",
+            "GOPR0396_11_00", "GOPR0410_11_00", "GOPR0854_11_00",
+            "GOPR0862_11_00", "GOPR0868_11_00", "GOPR0869_11_00",
+            "GOPR0871_11_00", "GOPR0881_11_01"
+        ]
+
+        # Choose split based on set_type
+        if set_type == 'train':
+            split_folder = 'train'
+            selected_videos = train_videos
+        else:  # 'valid' or 'test'
+            split_folder = 'test'
+            selected_videos = test_videos
+
+        print(f"[INFO] Loading {set_type} data from {split_folder}/ folder")
 
         for rdir in root_dir:
             if rdir.endswith('/'):
                 rdir = rdir[:-1]
 
-            test_root = rdir + '/test'  # FIX: Append /test here
+            data_root = os.path.join(rdir, split_folder)
+
+            # Auto-detect videos if folder exists
+            if os.path.exists(data_root):
+                available_videos = [d for d in os.listdir(data_root)
+                                    if os.path.isdir(os.path.join(data_root, d))]
+                # Use intersection of selected and available
+                videos_to_use = [v for v in selected_videos if v in available_videos]
+
+                # If no match, use all available videos
+                if not videos_to_use:
+                    videos_to_use = available_videos
+                    print(f"[WARN] No matching videos found, using all {len(videos_to_use)} available")
+            else:
+                print(f"[ERROR] Path does not exist: {data_root}")
+                continue
 
             try:
                 new_samples = self.gen_samples_gopro(
-                    test_root,
-                    selected_test_videos,
+                    data_root,
+                    videos_to_use,
                     suffix,
                     num_gts,
                     num_fut,
@@ -152,7 +189,7 @@ class BAistPP(Dataset):
                 traceback.print_exc()
 
         self.samples = self.samples[::temporal_step]
-        print(f"[INFO] Loaded {len(self.samples)} samples")
+        print(f"[INFO] Loaded {len(self.samples)} {set_type} samples")
 
     def gen_transform(self, aug_args):
         """
