@@ -104,6 +104,11 @@ def validation(local_rank, d_configs, p_configs, num_sampling, logger):
 
         evaluate(d_model, p_model, valid_loader, local_rank, num_sampling, logger, valid_dataset.sigma, denoiser)
 
+    print("\n" + "=" * 60)
+    print("All evaluations complete!")
+    print("=" * 60)
+    logger.close()
+
 
 @torch.no_grad()
 def evaluate(d_model, p_model, valid_loader, local_rank, num_sampling, logger, sigma, denoiser):
@@ -234,7 +239,6 @@ def evaluate(d_model, p_model, valid_loader, local_rank, num_sampling, logger, s
         eval_time_interval, psnr_meter_better.avg, ssim_meter_better.avg, lpips_meter_better.avg
     )
     logger(msg, prefix='[valid max. WITHOUT RESTORMER]')  # Modified prefix
-    logger.close()
 
 @record
 def main():
