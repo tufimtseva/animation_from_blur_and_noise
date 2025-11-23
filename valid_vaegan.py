@@ -114,27 +114,52 @@ def evaluate(d_model, p_model, valid_loader, local_rank, num_sampling, logger, s
     for i, tensor in enumerate(tqdm(valid_loader, total=len(valid_loader))):
         tensor['inp'] = tensor['inp'].to(device)  # (b, 1, 3, h, w)
 
+        torch.cuda.empty_cache()
+
         blurry_input = tensor['inp'].squeeze(1)  # Remove the '1' dimension
 
-        # Check data range and normalize if needed
-        if blurry_input.max() > 1.0:
-            # Data is in [0, 255] range
-            blurry_input_normalized = blurry_input / 255.0
+        # # Check data range and normalize if needed
+        # if blurry_input.max() > 1.0:
+        #     # Data is in [0, 255] range
+        #     blurry_input_normalized = blurry_input / 255.0
+        #     needs_denorm = True
+        # else:
+        #     # Data is already in [0, 1] range
+        #     blurry_input_normalized = blurry_input
+        #     needs_denorm = False
+        #
+        # # Apply Restormer denoising
+        # denoised_blur = denoiser(blurry_input_normalized)
+        #
+        # # Denormalize back to original range if needed
+        # if needs_denorm:
+        #     denoised_blur = denoised_blur * 255.0
+        #
+        # # Restore the expected shape: (b, 3, h, w) -> (b, 1, 3, h, w)
+        # tensor['inp'] = denoised_blur.unsqueeze(1)
+
+        # Move to CPU for denoising
+        blurry_cpu = blurry_input.cpu()
+
+        if blurry_cpu.max() > 1.0:
+            blurry_cpu = blurry_cpu / 255.0
             needs_denorm = True
         else:
-            # Data is already in [0, 1] range
-            blurry_input_normalized = blurry_input
             needs_denorm = False
 
-        # Apply Restormer denoising
-        denoised_blur = denoiser(blurry_input_normalized)
+        # Denoise on CPU (slower but saves GPU memory)
+        denoised_blur = denoiser.cpu()(blurry_cpu)
 
-        # Denormalize back to original range if needed
         if needs_denorm:
             denoised_blur = denoised_blur * 255.0
 
-        # Restore the expected shape: (b, 3, h, w) -> (b, 1, 3, h, w)
+        # Move back to GPU
+        denoised_blur = denoised_blur.to(device)
         tensor['inp'] = denoised_blur.unsqueeze(1)
+
+        # Move denoiser back to GPU for next iteration
+        denoiser = denoiser.cuda(local_rank)
+
 
         # Optional: Print debug info for first batch
         if i == 0:
