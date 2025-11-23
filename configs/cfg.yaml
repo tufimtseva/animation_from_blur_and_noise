@@ -35,8 +35,8 @@ dataset_args:
   num_fut: 0
   num_past: 0
   temporal_step: 1
-  use_trend: false
-  use_flow: false
+  use_trend: true
+  use_flow: true
   noisy: false
   noise_level: 10
   aug_args:
