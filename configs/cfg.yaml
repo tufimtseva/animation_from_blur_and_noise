@@ -48,8 +48,8 @@ decomposer_s2_args:
 epoch: 100
 num_iterations: 1
 num_workers: 4
-train_batch_size: 2
-valid_batch_size: 2
+train_batch_size: 1
+valid_batch_size: 1
 val_range: 255.0
 
 # Model settings
