@@ -61,7 +61,7 @@ perc_ratio: 0.1
 
 # Flow estimator (for second stage)
 flow_estimator_args:
-  checkpoint: ./checkpoints/raft-things.pth
+  checkpoint: ./checkpoints/raft-sintel.pth
   iters: 20
 
 # Trend embedder settings
