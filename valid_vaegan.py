@@ -44,12 +44,24 @@ def validation(local_rank, d_configs, p_configs, num_sampling, logger):
     # dataset init
     dataset_args = d_configs['dataset_args']
 
+    for noise_level in [0, 5, 10, 20]:
+        print(f"[INFO] Testing with noise_level={noise_level}")
 
-    valid_dataset = BDDataset(set_type='valid', noisy=False, noise_level=0, **dataset_args)
-    valid_loader = DataLoader(valid_dataset,
-                              batch_size=1,
-                              num_workers=d_configs['num_workers'],
-                              pin_memory=True)
+        dataset_args_override = dataset_args.copy()
+        dataset_args_override['noisy'] = (noise_level > 0)
+        dataset_args_override['noise_level'] = noise_level
+
+        valid_dataset = BDDataset(set_type='valid', **dataset_args_override)
+        valid_loader = DataLoader(valid_dataset,
+                                  batch_size=1,
+                                  num_workers=d_configs['num_workers'],
+                                  pin_memory=True)
+
+    # valid_dataset = BDDataset(set_type='valid', noisy=True, noise_level=0, **dataset_args)
+    # valid_loader = DataLoader(valid_dataset,
+    #                           batch_size=1,
+    #                           num_workers=d_configs['num_workers'],
+    #                           pin_memory=True)
 
     evaluate(d_model, p_model, valid_loader, local_rank, num_sampling, logger, valid_dataset.sigma)
 
