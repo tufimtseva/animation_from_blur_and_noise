@@ -13,7 +13,6 @@ def save_frame_sequence(frames, save_dir, video_name, sample_idx):
     os.makedirs(save_dir, exist_ok=True)
     
     for frame_idx, frame in enumerate(frames):
-        # Convert tensor to image
         img = frame.permute(1, 2, 0).cpu().numpy().astype(np.uint8)
         img_bgr = cv2.cvtColor(img, cv2.COLOR_RGB2BGR)
         
@@ -23,11 +22,9 @@ def save_frame_sequence(frames, save_dir, video_name, sample_idx):
     
     print(f'Saved {len(frames)} frames for {video_name} sample {sample_idx}')
 
-# Initialize DDP
 dist.init_process_group(backend="nccl")
 torch.cuda.set_device(0)
 
-# Load config
 config_path = '/w/20251/mahikav/experiments/gopro_mbd_mahika/cfg.yaml'
 with open(config_path) as f:
     configs = yaml.full_load(f)
@@ -39,38 +36,32 @@ configs['dataset_args']['use_trend'] = False
 num_gts = configs['dataset_args']['num_gts']
 print(f'Model generates {num_gts} frames per input')
 
-# Initialize model
 model = MBD(local_rank=0, configs=configs)
-
-# Load test dataset
 test_dataset = BDDataset(set_type='valid', **configs['dataset_args'])
 test_loader = DataLoader(test_dataset, batch_size=1, shuffle=False)
 
-# Create output directory
-output_dir = 'generated_sequences'
+output_dir = 'generated_sequences_one_per_video'
 os.makedirs(output_dir, exist_ok=True)
 
-# Generate sequences for first 5 test samples
+# One sample from each of the 11 test videos
+sample_indices = [0, 20, 40, 94, 114, 134, 154, 174, 194, 214, 220]
+
 with torch.no_grad():
     for i, tensor in enumerate(test_loader):
-        if i >= 5:  # Process first 5 samples
-            break
+        if i not in sample_indices:
+            continue
             
         tensor['inp'] = tensor['inp'].cuda()
         tensor['gt'] = tensor['gt'].cuda()
         video_name = tensor['video'][0] if isinstance(tensor['video'], list) else tensor['video']
         
-        print(f'\nProcessing sample {i} from video: {video_name}')
+        print(f'Processing sample {i} from video: {video_name}')
         
-        # Run model
         out_tensor = model.update(inp_tensor=tensor, training=False)
+        pred_frames = out_tensor['pred_imgs'][0]
         
-        # pred_imgs shape: (batch=1, num_gts=7, 3, H, W)
-        pred_frames = out_tensor['pred_imgs'][0]  # (7, 3, H, W)
-        
-        # Save all predicted frames
         save_frame_sequence(pred_frames, output_dir, video_name, i)
 
 dist.destroy_process_group()
-print(f'\nDone! Generated sequences saved to {output_dir}/')
-print(f'Each sample has {num_gts} predicted frames')
+print(f'\nDone! Generated 7 frames each from {len(sample_indices)} different videos')
+print(f'Total: {len(sample_indices) * 7} output frames in {output_dir}/')
