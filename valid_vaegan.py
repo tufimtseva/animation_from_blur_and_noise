@@ -1,4 +1,4 @@
-import yaml
+impimport yaml
 import random
 import torch
 import torchmetrics
@@ -25,9 +25,6 @@ import os
 
 SAVE_DIR = "saved_output"
 os.makedirs(SAVE_DIR, exist_ok=True)
-# Create subdirectories for before/after
-os.makedirs(join(SAVE_DIR, "before_processing"), exist_ok=True)
-os.makedirs(join(SAVE_DIR, "after_processing"), exist_ok=True)
 
 
 def init_seeds(seed=0):
@@ -40,11 +37,9 @@ def init_seeds(seed=0):
 def validation(local_rank, d_configs, p_configs, num_sampling, logger):
     torch.backends.cudnn.benchmark = True
 
-    # model init
     d_model = MBD(local_rank=local_rank, configs=d_configs)
     p_model = GP(local_rank=local_rank, configs=p_configs)
 
-    # dataset init
     dataset_args = d_configs['dataset_args']
 
     for noise_level in [0, 5, 10, 20]:
@@ -67,7 +62,6 @@ def validation(local_rank, d_configs, p_configs, num_sampling, logger):
 
 @torch.no_grad()
 def evaluate(d_model, p_model, valid_loader, local_rank, num_sampling, logger, sigma):
-    # Preparation
     torch.cuda.empty_cache()
     device = torch.device("cuda", local_rank)
     psnr_meter = AverageMeter()
@@ -78,20 +72,24 @@ def evaluate(d_model, p_model, valid_loader, local_rank, num_sampling, logger, s
     lpips_meter_better = AverageMeter()
     time_stamp = time.time()
 
-    # Number of sequences to save (save first 5 sequences)
     NUM_SEQUENCES_TO_SAVE = 5
 
+    noise_dir = join(SAVE_DIR, f"noise_sigma_{sigma}")
+    os.makedirs(noise_dir, exist_ok=True)
+
     for i, tensor in enumerate(tqdm(valid_loader, total=len(valid_loader))):
-        tensor['inp'] = tensor['inp'].to(device)  # (b, 1, 3, h, w)
+        tensor['inp'] = tensor['inp'].to(device)
         tensor['trend'] = torch.zeros_like(tensor['inp'])[:, :, :2]
-        tensor['gt'] = tensor['gt'].to(device)  # (b, num_gts, 3, h, w)
+        tensor['gt'] = tensor['gt'].to(device)
         b, num_gts, c, h, w = tensor['gt'].shape
 
-        # === SAVE INPUT (BEFORE) ===
         if i < NUM_SEQUENCES_TO_SAVE:
-            input_img = tensor['inp'][0, 0].cpu()  # (3, h, w)
-            input_save_path = join(SAVE_DIR, "before_processing", f"sigma_{sigma}_seq{i}_input.png")
-            vutils.save_image(input_img / 255.0, input_save_path)  # Normalize to [0, 1] for saving
+            seq_dir = join(noise_dir, f"sequence_{i}")
+            os.makedirs(seq_dir, exist_ok=True)
+
+            input_img = tensor['inp'][0, 0].cpu()
+            input_save_path = join(seq_dir, "00_input_blurry.png")
+            vutils.save_image(input_img / 255.0, input_save_path)
 
         psnr_vals = []
         ssim_vals = []
@@ -111,22 +109,21 @@ def evaluate(d_model, p_model, valid_loader, local_rank, num_sampling, logger, s
             out_tensor = d_model.update(inp_tensor=tensor, training=False)
             pred_imgs = out_tensor['pred_imgs']
             gt_imgs = out_tensor['gt_imgs']
-            pred_imgs = pred_imgs.reshape(num_gts * b, c, h, w)
 
-            # === SAVE OUTPUT FRAMES (AFTER) ===
+            pred_imgs_for_save = pred_imgs[0]
+            gt_imgs_for_save = gt_imgs[0]
+
             if i < NUM_SEQUENCES_TO_SAVE:
-                for j in range(pred_imgs.shape[0]):
-                    frame_save_path = join(SAVE_DIR, "after_processing", f"sigma_{sigma}_seq{i}_frame{j}.png")
-                    frame_img = pred_imgs[j].cpu()
-                    vutils.save_image(frame_img / 255.0, frame_save_path)  # Normalize to [0, 1]
+                for frame_idx in range(num_gts):
+                    pred_frame = pred_imgs_for_save[frame_idx].cpu() / 255.0
+                    pred_path = join(seq_dir, f"frame{frame_idx}_predicted.png")
+                    vutils.save_image(pred_frame, pred_path)
 
-                # Also save GT frames for reference
-                gt_imgs_save = gt_imgs.reshape(num_gts * b, c, h, w)
-                for j in range(gt_imgs_save.shape[0]):
-                    gt_save_path = join(SAVE_DIR, "after_processing", f"sigma_{sigma}_seq{i}_gt{j}.png")
-                    gt_img = gt_imgs_save[j].cpu()
-                    vutils.save_image(gt_img / 255.0, gt_save_path)
+                    gt_frame = gt_imgs_for_save[frame_idx].cpu() / 255.0
+                    gt_path = join(seq_dir, f"frame{frame_idx}_groundtruth.png")
+                    vutils.save_image(gt_frame, gt_path)
 
+            pred_imgs = pred_imgs.reshape(num_gts * b, c, h, w)
             pred_imgs = pred_imgs.to(device)
             gt_imgs = gt_imgs.to(device)
             pred_imgs_rev = torch.flip(pred_imgs, dims=[1, ])
@@ -157,7 +154,6 @@ def evaluate(d_model, p_model, valid_loader, local_rank, num_sampling, logger, s
         ssim_meter_better.update(max(ssim_vals_better), num_gts * b)
         lpips_meter_better.update(min(lpips_vals_better), num_gts * b)
 
-    # Ending of validation
     eval_time_interval = time.time() - time_stamp
     msg = 'eval time: {} sec, psnr: {:.5f}, ssim: {:.5f}, lpips: {:.4f}'.format(
         eval_time_interval, psnr_meter.avg, ssim_meter.avg, lpips_meter.avg
@@ -168,12 +164,11 @@ def evaluate(d_model, p_model, valid_loader, local_rank, num_sampling, logger, s
     )
     logger(msg, prefix=f'[valid max. σ={sigma}]')
 
-    print(f"[INFO] Saved images for σ={sigma} in {SAVE_DIR}")
+    print(f"[INFO] Saved images for σ={sigma} in {noise_dir}")
 
 
 @record
 def main():
-    # load args & configs
     parser = ArgumentParser(description='Guidance prediction & Blur Decomposition')
     parser.add_argument('--local_rank', default=0, type=int, help='local rank')
     parser.add_argument('--log_dir', default='logs', help='path of log')
@@ -187,14 +182,12 @@ def main():
     args = parser.parse_args()
     num_sampling = args.num_sampling
 
-    # Para for decomposer
     decomposer_config = join(args.decomposer_resume_dir, 'cfg.yaml')
     with open(decomposer_config) as f:
         d_configs = yaml.full_load(f)
     d_configs['resume_dir'] = args.decomposer_resume_dir
     d_configs['num_iterations'] = args.num_iters
 
-    # Para for predictor
     predictor_config = join(args.predictor_resume_dir, 'cfg.yaml')
     with open(predictor_config, 'rt', encoding='utf8') as f:
         p_configs = yaml.full_load(f)
