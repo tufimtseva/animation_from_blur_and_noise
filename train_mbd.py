@@ -228,7 +228,7 @@ def evaluate(model, valid_loader, num_eval, local_rank, writer):
 
         # Record image results
         if rank == 0 and i == random_idx:
-            inp_img = out_tensor['inp_img']  # inp_img shape (b, c, h, w)
+            inp_img = out_tensor["inp_img"].permute(0, 2, 3, 1).cpu().detach().numpy().astype(np.uint8)
             trend_img = out_tensor.get('trend_img', None)  # Optional
             if trend_img is not None:
                 trend_img = trend_img.permute(0, 2, 3, 1).cpu().detach().numpy()
@@ -236,8 +236,7 @@ def evaluate(model, valid_loader, num_eval, local_rank, writer):
                 for item in trend_img:
                     trend_img_rgb.append(trend_plus_vis(item))
             else:
-                trend_img_rgb = None
-                trend_img_rgb.append(trend_plus_vis(item))
+                trend_img_rgb = [None] * b
 
             pred_imgs = pred_imgs.permute(0, 3, 1, 4, 2).reshape(b, h, num_gts * w, c)
             pred_imgs = pred_imgs.cpu().numpy().astype(np.uint8)
@@ -247,10 +246,12 @@ def evaluate(model, valid_loader, num_eval, local_rank, writer):
 
             for j in range(b):
                 # Record predicted images pair
-                if trend_img_rgb is not None:
+                if trend_img_rgb is not None and trend_img_rgb[j] is not None:
                     cat_pred_imgs = np.concatenate([inp_img[j], trend_img_rgb[j], pred_imgs[j]], axis=1)
-                    cat_gt_imgs = np.concatenate([inp_img[j], trend_img_rgb[j], gt_imgs[j]],
-                                             axis=1)  # (h, (2 + num_gts) * w, c)
+                    cat_gt_imgs = np.concatenate([inp_img[j], trend_img_rgb[j], gt_imgs[j]], axis=1)
+                else:
+                    cat_pred_imgs = np.concatenate([inp_img[j], pred_imgs[j]], axis=1)
+                    cat_gt_imgs = np.concatenate([inp_img[j], gt_imgs[j]], axis=1)
                 cat_imgs = np.concatenate([cat_gt_imgs, cat_pred_imgs], axis=0)
                 writer.add_image('valid/imgs_results_{}'.format(j), cat_imgs, num_eval, dataformats='HWC')
 
