@@ -312,7 +312,8 @@ class MBD:
                 noise_estimation_loss = F.l1_loss(estimated_noise_level, gt_noise_level)
 
             # Store for logging
-            out_tensor['estimated_noise'] = estimated_noise_level.detach()
+            # out_tensor['estimated_noise'] = estimated_noise_level.detach()
+            out_tensor['noise_level_est'] = noise_estimation_loss.detach()
             if gt_noise_level is not None:
                 out_tensor['gt_noise'] = gt_noise_level.detach()
 
