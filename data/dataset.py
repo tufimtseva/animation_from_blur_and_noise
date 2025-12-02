@@ -475,8 +475,33 @@ class BAistPP(Dataset):
             tensor['flow'] = transform(images=tensor['flow'], replay_args=replay_args, flow=True)['images']
         return tensor
 
-    def add_noise(self, x, sigma=0.1):
-        return x + torch.randn_like(x) * sigma
+    # def add_noise(self, x, sigma=0.1):
+    #     return x + torch.randn_like(x) * sigma
+
+    def add_noise(self, x, sigma=10):
+        """
+        Add Gaussian noise to [0, 255] image
+        Args:
+            x: numpy array or torch.Tensor in [0, 255] range
+            sigma: noise level (0-25)
+        Returns:
+            noisy image in [0, 255] range (clamped and properly scaled)
+        """
+        # Convert to torch if needed
+        if isinstance(x, np.ndarray):
+            x = torch.from_numpy(x).float()
+
+        # Normalize to [0, 1]
+        x_norm = x / 255.0
+
+        # Add noise in normalized space
+        noise = torch.randn_like(x_norm) * (sigma / 255.0)
+        x_noisy = x_norm + noise
+
+        # Clamp to valid range and scale back to [0, 255]
+        x_noisy = torch.clamp(x_noisy, 0.0, 1.0) * 255.0
+
+        return x_noisy
 
     def __getitem__(self, idx):
         """
@@ -494,9 +519,20 @@ class BAistPP(Dataset):
             tensor = self.load_sample(sample)
         tensor = self.replay_image_aug(tensor, self.img_transform)
         tensor = self.replay_video_aug(tensor, self.vid_transform)
+        # if self.noisy:
+        #     inp = [torch.from_numpy(img).float() for img in tensor['inp']]
+        #     tensor['inp'] = [self.add_noise(img, self.sigma) for img in inp]
+
         if self.noisy:
-            inp = [torch.from_numpy(img).float() for img in tensor['inp']]
-            tensor['inp'] = [self.add_noise(img, self.sigma) for img in inp]
+            # Apply noise to each input image
+            noisy_inp = []
+            for img in tensor['inp']:  # img is numpy array in [0, 255]
+                noisy_img = self.add_noise(img,
+                                           self.sigma)  # Returns torch tensor
+                noisy_inp.append(noisy_img.numpy())  # Convert back to numpy
+            tensor['inp'] = noisy_inp
+
+
         tensor['inp'] = torch.from_numpy(np.stack(tensor['inp'], axis=0).transpose((0, 3, 1, 2))).float()
         tensor['gt'] = torch.from_numpy(np.stack(tensor['gt'], axis=0).transpose((0, 3, 1, 2))).float()
         if self.use_trend:
