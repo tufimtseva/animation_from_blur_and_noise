@@ -523,6 +523,16 @@ class BAistPP(Dataset):
         #     inp = [torch.from_numpy(img).float() for img in tensor['inp']]
         #     tensor['inp'] = [self.add_noise(img, self.sigma) for img in inp]
 
+        if self.noisy and idx == 0:  # Only print for first sample to avoid spam
+            original_inp = tensor['inp'][0].copy()
+            print(f"\n[Dataset Debug idx={idx}]")
+            print(f"  self.noisy = {self.noisy}")
+            print(f"  self.sigma = {self.sigma}")
+            print(
+                f"  BEFORE noise - mean: {original_inp.mean():.2f}, std: {original_inp.std():.2f}")
+            print(
+                f"  BEFORE noise - range: [{original_inp.min():.2f}, {original_inp.max():.2f}]")
+
         if self.noisy:
             # Apply noise to each input image
             noisy_inp = []
@@ -532,6 +542,16 @@ class BAistPP(Dataset):
                 noisy_inp.append(noisy_img.numpy())  # Convert back to numpy
             tensor['inp'] = noisy_inp
 
+            # === DEBUG: Check AFTER noise ===
+            if idx == 0:
+                print(
+                    f"  AFTER noise - mean: {tensor['inp'][0].mean():.2f}, std: {tensor['inp'][0].std():.2f}")
+                print(
+                    f"  AFTER noise - range: [{tensor['inp'][0].min():.2f}, {tensor['inp'][0].max():.2f}]")
+                # Compute difference to verify noise was added
+                diff = np.abs(original_inp - tensor['inp'][0])
+                print(
+                    f"  Noise added (diff) - mean: {diff.mean():.2f}, max: {diff.max():.2f}")
 
         tensor['inp'] = torch.from_numpy(np.stack(tensor['inp'], axis=0).transpose((0, 3, 1, 2))).float()
         tensor['gt'] = torch.from_numpy(np.stack(tensor['gt'], axis=0).transpose((0, 3, 1, 2))).float()
