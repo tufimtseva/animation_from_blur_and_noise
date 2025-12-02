@@ -450,12 +450,6 @@ def ckpt_convert(param):
         if 'module.' in k
     }
 
-def ckpt_convert2(param):
-    return {
-        k.replace('module.', ''): v  # Remove 'module.' if present
-        for k, v in param.items()
-        # No filter - include ALL keys
-    }
 
 class Vgg19(torch.nn.Module):
     """
