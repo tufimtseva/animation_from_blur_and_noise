@@ -51,36 +51,36 @@ def validation(local_rank, d_configs, p_configs, num_sampling, logger):
     noise_estimator = noise_estimator.to(device).eval()
     # noise_estimator = noise_estimator.cuda(local_rank).eval()
 
-    # In your eval code, after loading the noise estimator:
-    print("\n" + "=" * 60)
-    print("NOISE ESTIMATOR DEBUG INFO")
-    print("=" * 60)
-
-    # Check if weights are initialized or trained
-    fc_weights = noise_estimator.fc[0].weight.data
-    fc_bias = noise_estimator.fc[0].bias.data
-
-    print(f"FC layer 1 weight stats:")
-    print(f"  Mean: {fc_weights.mean().item():.6f}")
-    print(f"  Std: {fc_weights.std().item():.6f}")
-    print(f"  Min: {fc_weights.min().item():.6f}")
-    print(f"  Max: {fc_weights.max().item():.6f}")
-
-    print(f"\nFC layer 1 bias: {fc_bias}")
-
-    # Check last layer (the one that outputs noise level)
-    last_fc_weight = noise_estimator.fc[2].weight.data
-    last_fc_bias = noise_estimator.fc[2].bias.data
-
-    print(f"\nLast FC layer weight: {last_fc_weight}")
-    print(f"Last FC layer bias: {last_fc_bias}")
-
-    print("\nConv1 weight stats:")
-    conv1_weights = noise_estimator.conv1.weight.data
-    print(f"  Mean: {conv1_weights.mean().item():.6f}")
-    print(f"  Std: {conv1_weights.std().item():.6f}")
-
-    print("=" * 60 + "\n")
+    # # In your eval code, after loading the noise estimator:
+    # print("\n" + "=" * 60)
+    # print("NOISE ESTIMATOR DEBUG INFO")
+    # print("=" * 60)
+    #
+    # # Check if weights are initialized or trained
+    # fc_weights = noise_estimator.fc[0].weight.data
+    # fc_bias = noise_estimator.fc[0].bias.data
+    #
+    # print(f"FC layer 1 weight stats:")
+    # print(f"  Mean: {fc_weights.mean().item():.6f}")
+    # print(f"  Std: {fc_weights.std().item():.6f}")
+    # print(f"  Min: {fc_weights.min().item():.6f}")
+    # print(f"  Max: {fc_weights.max().item():.6f}")
+    #
+    # print(f"\nFC layer 1 bias: {fc_bias}")
+    #
+    # # Check last layer (the one that outputs noise level)
+    # last_fc_weight = noise_estimator.fc[2].weight.data
+    # last_fc_bias = noise_estimator.fc[2].bias.data
+    #
+    # print(f"\nLast FC layer weight: {last_fc_weight}")
+    # print(f"Last FC layer bias: {last_fc_bias}")
+    #
+    # print("\nConv1 weight stats:")
+    # conv1_weights = noise_estimator.conv1.weight.data
+    # print(f"  Mean: {conv1_weights.mean().item():.6f}")
+    # print(f"  Std: {conv1_weights.std().item():.6f}")
+    #
+    # print("=" * 60 + "\n")
 
 
 
@@ -195,8 +195,38 @@ def evaluate(d_model, p_model, valid_loader, device, num_sampling, logger, sigma
         print("Input range to noise estimator:", blurry_input_normalized.min(),
               blurry_input_normalized.max())
 
-        estimated_noise = noise_estimator(blurry_input_normalized).item()
-        print("Estimated noise:", estimated_noise)
+        # estimated_noise = noise_estimator(blurry_input_normalized).item()
+        # print("Estimated noise:", estimated_noise)
+
+        # Hook into intermediate layers
+        activations = {}
+
+        def get_activation(name):
+            def hook(model, input, output):
+                activations[name] = output.detach()
+
+            return hook
+
+        noise_estimator.conv1.register_forward_hook(get_activation('conv1'))
+        noise_estimator.conv2.register_forward_hook(get_activation('conv2'))
+        noise_estimator.pool.register_forward_hook(get_activation('pool'))
+
+        # Forward pass
+        estimated_noise = noise_estimator(blurry_input_normalized)
+
+        # Check activations
+        print(f"\nActivation stats:")
+        print(
+            f"Conv1 output: min={activations['conv1'].min():.6f}, max={activations['conv1'].max():.6f}, mean={activations['conv1'].mean():.6f}")
+        print(
+            f"Conv2 output: min={activations['conv2'].min():.6f}, max={activations['conv2'].max():.6f}, mean={activations['conv2'].mean():.6f}")
+        print(f"Pool output: {activations['pool'].flatten()}")
+        print(f"Final output: {estimated_noise.item():.6f}")
+
+
+
+
+
         noise_threshold = 20
         # needs_denoiser = False
 
