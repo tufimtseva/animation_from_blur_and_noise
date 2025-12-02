@@ -137,7 +137,19 @@ def evaluate(d_model, p_model, valid_loader, device, num_sampling, logger, sigma
         torch.cuda.empty_cache()
 
         blurry_input = tensor['inp'].squeeze(1)
-        estimated_noise = noise_estimator(blurry_input).item()
+        # Check data range and normalize if needed
+        if blurry_input.max() > 1.0:
+            # Data is in [0, 255] range
+            blurry_input_normalized = blurry_input / 255.0
+            needs_denorm = True
+        else:
+            # Data is already in [0, 1] range
+            blurry_input_normalized = blurry_input
+            needs_denorm = False
+
+
+
+        estimated_noise = noise_estimator(blurry_input_normalized).item()
         print("Estimated noise:", estimated_noise)
         noise_threshold = 20
         # needs_denoiser = False
@@ -147,26 +159,10 @@ def evaluate(d_model, p_model, valid_loader, device, num_sampling, logger, sigma
 
             # needs_denoiser = True
 
-
-            # Check data range and normalize if needed
-            if blurry_input.max() > 1.0:
-                # Data is in [0, 255] range
-                blurry_input_normalized = blurry_input / 255.0
-                needs_denorm = True
-            else:
-                # Data is already in [0, 1] range
-                blurry_input_normalized = blurry_input
-                needs_denorm = False
-
             # Apply Restormer denoising
             denoised_blur = denoiser(blurry_input_normalized)
 
-            # Denormalize back to original range if needed
-            if needs_denorm:
-                denoised_blur = denoised_blur * 255.0
 
-            # Restore the expected shape: (b, 3, h, w) -> (b, 1, 3, h, w)
-            tensor['inp'] = denoised_blur.unsqueeze(1)
 
         # if i == 0:
         #     print(
@@ -176,6 +172,12 @@ def evaluate(d_model, p_model, valid_loader, device, num_sampling, logger, sigma
         #     print(f"[Denoising] Normalized for denoiser: {needs_denorm}\n")
 
 
+        # Denormalize back to original range if needed
+        if needs_denorm:
+            denoised_blur = denoised_blur * 255.0
+
+        # Restore the expected shape: (b, 3, h, w) -> (b, 1, 3, h, w)
+        tensor['inp'] = denoised_blur.unsqueeze(1)
         tensor['trend'] = torch.zeros_like(tensor['inp'])[:, :, :2]
         tensor['gt'] = tensor['gt'].to(device)  # (b, num_gts, 3, h, w)
         b, num_gts, c, h, w = tensor['gt'].shape
