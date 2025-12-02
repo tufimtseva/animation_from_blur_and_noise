@@ -198,80 +198,62 @@ def evaluate(d_model, p_model, valid_loader, device, num_sampling, logger, sigma
         # estimated_noise = noise_estimator(blurry_input_normalized).item()
         # print("Estimated noise:", estimated_noise)
 
-
-
-        # === DETAILED FC DEBUG ===
+        # === CORRECTED DEBUG ===
         print("\n" + "=" * 60)
         print("DETAILED FORWARD PASS DEBUG")
         print("=" * 60)
 
-        # Get intermediate activations
         with torch.no_grad():
             x = blurry_input_normalized
             print(f"Input shape: {x.shape}")
 
-            # Conv1
+            # Conv layers
             x = noise_estimator.conv1(x)
-            print(f"\nAfter conv1 (before ReLU):")
-            print(f"  Shape: {x.shape}")
-            print(f"  Range: [{x.min():.4f}, {x.max():.4f}]")
-            print(f"  Mean: {x.mean():.4f}, Std: {x.std():.4f}")
-
+            print(
+                f"\nAfter conv1 (before ReLU): mean={x.mean():.4f}, range=[{x.min():.4f}, {x.max():.4f}]")
             x = F.relu(x)
-            print(f"After conv1 ReLU:")
-            print(f"  Range: [{x.min():.4f}, {x.max():.4f}]")
-            print(f"  Mean: {x.mean():.4f}")
+            print(f"After conv1 ReLU: mean={x.mean():.4f}")
 
-            # Conv2
             x = noise_estimator.conv2(x)
-            print(f"\nAfter conv2 (before ReLU):")
-            print(f"  Shape: {x.shape}")
-            print(f"  Range: [{x.min():.4f}, {x.max():.4f}]")
-            print(f"  Mean: {x.mean():.4f}, Std: {x.std():.4f}")
-
+            print(
+                f"\nAfter conv2 (before ReLU): mean={x.mean():.4f}, range=[{x.min():.4f}, {x.max():.4f}]")
             x = F.relu(x)
-            print(f"After conv2 ReLU:")
-            print(f"  Range: [{x.min():.4f}, {x.max():.4f}]")
-            print(f"  Mean: {x.mean():.4f}")
+            print(f"After conv2 ReLU: mean={x.mean():.4f}")
 
             # Pool
             x = noise_estimator.pool(x)
-            print(f"\nAfter pooling:")
-            print(f"  Shape: {x.shape}")
             x_flat = x.flatten(1)
-            print(f"  Flattened shape: {x_flat.shape}")
-            print(f"  Values: {x_flat[0]}")
+            print(f"\nAfter pooling and flatten: shape={x_flat.shape}")
+            print(f"  Pooled values: {x_flat[0]}")
 
-            # FC layers
+            # FC network step by step
             print(f"\n--- FC Network ---")
-            x = noise_estimator.fc[0](x_flat)  # Linear(16, 8)
-            print(f"After FC1 (Linear 16→8, before ReLU):")
-            print(f"  Values: {x[0]}")
-            print(f"  Range: [{x.min():.4f}, {x.max():.4f}]")
+            x_fc1 = noise_estimator.fc[0](x_flat)  # Linear(16, 8)
+            print(f"After FC1 Linear(16→8):")
+            print(f"  Values: {x_fc1[0]}")
 
-            x = noise_estimator.fc[1](x)  # ReLU
+            x_fc1_relu = noise_estimator.fc[1](x_fc1)  # ReLU
             print(f"After FC1 ReLU:")
-            print(f"  Values: {x[0]}")
-            print(f"  Range: [{x.min():.4f}, {x.max():.4f}]")
-            print(f"  Non-zero count: {(x > 0).sum().item()}/8")
+            print(f"  Values: {x_fc1_relu[0]}")
+            print(f"  Non-zero: {(x_fc1_relu > 0).sum().item()}/8")
 
-            x = noise_estimator.fc[2](x_flat)  # Linear(8, 1)
-            print(f"\nAfter FC2 (Linear 8→1, before Sigmoid):")
-            print(f"  Value: {x.item():.6f}")
+            x_fc2 = noise_estimator.fc[2](x_fc1_relu)  # Linear(8, 1) ← FIXED
+            print(f"\nAfter FC2 Linear(8→1):")
+            print(f"  Value: {x_fc2.item():.6f}")
 
-            x = noise_estimator.fc[3](x)  # Sigmoid
+            x_sig = noise_estimator.fc[3](x_fc2)  # Sigmoid
             print(f"After Sigmoid:")
-            print(f"  Value: {x.item():.6f}")
+            print(f"  Value: {x_sig.item():.6f}")
 
-            x = x * 25.0
-            print(f"Final output (* 25):")
-            print(f"  Value: {x.item():.6f}")
+            x_final = x_sig * 25.0
+            print(f"Final (* 25):")
+            print(f"  Value: {x_final.item():.6f}")
 
         print("=" * 60 + "\n")
 
-        # Then run the actual forward pass
+        # Compare with actual forward
         estimated_noise = noise_estimator(blurry_input_normalized).item()
-        print(f"Actual forward pass result: {estimated_noise:.6f}")
+        print(f"Actual forward() result: {estimated_noise:.6f}\n")
 
 
         noise_threshold = 20
