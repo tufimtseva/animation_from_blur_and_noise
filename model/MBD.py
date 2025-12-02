@@ -40,6 +40,16 @@ class NoiseEstimationBranch(nn.Module):
         return noise_level
 
 
+    def load(self, log_dir, device):
+        try:
+            self.load_state_dict(
+                ckpt_convert(torch.load(join(log_dir, 'noise_estimator.pth'),
+                                        map_location=device)))
+            print("[MBD] ✓ Loaded noise estimator checkpoint")
+        except:
+            print(
+                "[MBD] ⚠ No noise estimator checkpoint found, starting from scratch")
+
 class NoiseModulatedDecomposer(nn.Module):
     """
     Wraps a Decomposer and adds FiLM-style noise-aware feature modulation

@@ -9,7 +9,7 @@ import torch.distributed as dist
 import torch.nn.functional as F
 from argparse import ArgumentParser
 from torch.utils.data import DataLoader
-from model.MBD import MBD
+from model.MBD import MBD, NoiseEstimationBranch
 from model.utils import AverageMeter
 from os.path import join
 from logger import Logger
@@ -39,11 +39,17 @@ def init_seeds(seed=0):
 def validation(local_rank, d_configs, p_configs, num_sampling, logger):
     # Preparation and backup
     torch.backends.cudnn.benchmark = True
+    device = torch.device("cuda", local_rank)
 
     # model init
     d_model = MBD(local_rank=local_rank, configs=d_configs)
     p_model = GP(local_rank=local_rank, configs=p_configs)
 
+    noise_estimator = NoiseEstimationBranch()
+    # Load checkpoints
+    noise_estimator.load(d_configs['resume_dir'], device)
+    noise_estimator = noise_estimator.to(device).eval()
+    # noise_estimator = noise_estimator.cuda(local_rank).eval()
 
     print("\n" + "=" * 60)
     print("Loading Restormer Denoiser...")
@@ -90,7 +96,7 @@ def validation(local_rank, d_configs, p_configs, num_sampling, logger):
     dataset_args = d_configs['dataset_args']
 
     for noise_level in [30, 40, 50]:
-        # print(f"[INFO] Testing with noise_level={noise_level}")
+        print(f"[INFO] Testing with noise_level={noise_level}")
 
         dataset_args_override = dataset_args.copy()
         dataset_args_override['noisy'] = (noise_level > 0)
@@ -102,7 +108,7 @@ def validation(local_rank, d_configs, p_configs, num_sampling, logger):
                                   num_workers=d_configs['num_workers'],
                                   pin_memory=True)
 
-        evaluate(d_model, p_model, valid_loader, local_rank, num_sampling, logger, valid_dataset.sigma, denoiser)
+        evaluate(d_model, p_model, valid_loader, device, num_sampling, logger, valid_dataset.sigma, denoiser, noise_estimator)
 
     print("\n" + "=" * 60)
     print("All evaluations complete!")
@@ -111,10 +117,9 @@ def validation(local_rank, d_configs, p_configs, num_sampling, logger):
 
 
 @torch.no_grad()
-def evaluate(d_model, p_model, valid_loader, local_rank, num_sampling, logger, sigma, denoiser):
+def evaluate(d_model, p_model, valid_loader, device, num_sampling, logger, sigma, denoiser, noise_estimator):
     # Preparation
     torch.cuda.empty_cache()
-    device = torch.device("cuda", local_rank)
     psnr_meter = AverageMeter()
     ssim_meter = AverageMeter()
     lpips_meter = AverageMeter()
@@ -128,28 +133,35 @@ def evaluate(d_model, p_model, valid_loader, local_rank, num_sampling, logger, s
         tensor['inp'] = tensor['inp'].to(device)  # (b, 1, 3, h, w)
 
         torch.cuda.empty_cache()
+        estimated_noise = noise_estimator(tensor['inp']).item()
+        noise_threshold = 20
+        # needs_denoiser = False
 
-        blurry_input = tensor['inp'].squeeze(1)  # Remove the '1' dimension
+        if estimated_noise > noise_threshold:
+            print("Noise level is too high!, estimated: ", estimated_noise)
 
-        # Check data range and normalize if needed
-        if blurry_input.max() > 1.0:
-            # Data is in [0, 255] range
-            blurry_input_normalized = blurry_input / 255.0
-            needs_denorm = True
-        else:
-            # Data is already in [0, 1] range
-            blurry_input_normalized = blurry_input
-            needs_denorm = False
+            # needs_denoiser = True
+            blurry_input = tensor['inp'].squeeze(1)  # Remove the '1' dimension
 
-        # Apply Restormer denoising
-        denoised_blur = denoiser(blurry_input_normalized)
+            # Check data range and normalize if needed
+            if blurry_input.max() > 1.0:
+                # Data is in [0, 255] range
+                blurry_input_normalized = blurry_input / 255.0
+                needs_denorm = True
+            else:
+                # Data is already in [0, 1] range
+                blurry_input_normalized = blurry_input
+                needs_denorm = False
 
-        # Denormalize back to original range if needed
-        if needs_denorm:
-            denoised_blur = denoised_blur * 255.0
+            # Apply Restormer denoising
+            denoised_blur = denoiser(blurry_input_normalized)
 
-        # Restore the expected shape: (b, 3, h, w) -> (b, 1, 3, h, w)
-        tensor['inp'] = denoised_blur.unsqueeze(1)
+            # Denormalize back to original range if needed
+            if needs_denorm:
+                denoised_blur = denoised_blur * 255.0
+
+            # Restore the expected shape: (b, 3, h, w) -> (b, 1, 3, h, w)
+            tensor['inp'] = denoised_blur.unsqueeze(1)
 
         # if i == 0:
         #     print(
@@ -157,8 +169,6 @@ def evaluate(d_model, p_model, valid_loader, local_rank, num_sampling, logger, s
         #     print(
         #         f"[Denoising] Output range: [{denoised_blur.min():.2f}, {denoised_blur.max():.2f}]")
         #     print(f"[Denoising] Normalized for denoiser: {needs_denorm}\n")
-
-
 
 
         tensor['trend'] = torch.zeros_like(tensor['inp'])[:, :, :2]
@@ -234,11 +244,11 @@ def evaluate(d_model, p_model, valid_loader, local_rank, num_sampling, logger, s
     msg = 'eval time: {} sec, psnr: {:.5f}, ssim: {:.5f}, lpips: {:.4f}'.format(
         eval_time_interval, psnr_meter.avg, ssim_meter.avg, lpips_meter.avg
     )
-    logger(msg, prefix='[valid WITH RESTORMER]')  # Modified prefix to show denoising is active
+    logger(msg, prefix='[valid WITH OPTIONAL RESTORMER]')  # Modified prefix to show denoising is active
     msg = 'eval time: {:.4f} sec, psnr: {:.4f}, ssim: {:.4f}, lpips: {:.4f}'.format(
         eval_time_interval, psnr_meter_better.avg, ssim_meter_better.avg, lpips_meter_better.avg
     )
-    logger(msg, prefix='[valid max. WITH RESTORMER]')  # Modified prefix
+    logger(msg, prefix='[valid max. WITH OPTIONAL RESTORMER]')  # Modified prefix
 
 @record
 def main():
