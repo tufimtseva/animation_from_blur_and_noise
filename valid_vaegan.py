@@ -95,7 +95,7 @@ def validation(local_rank, d_configs, p_configs, num_sampling, logger):
     # dataset init
     dataset_args = d_configs['dataset_args']
     # noises = [5, 10, 40, 50]
-    noises = [50]
+    noises = [10]
 
     for noise_level in noises:
         print(f"[INFO] Testing with noise_level={noise_level}")
@@ -162,6 +162,13 @@ def evaluate(d_model, p_model, valid_loader, device, num_sampling, logger, sigma
             # Apply Restormer denoising
             denoised_blur = denoiser(blurry_input_normalized)
 
+            # Denormalize back to original range if needed
+            if needs_denorm:
+                denoised_blur = denoised_blur * 255.0
+
+            # Restore the expected shape: (b, 3, h, w) -> (b, 1, 3, h, w)
+            tensor['inp'] = denoised_blur.unsqueeze(1)
+
 
 
         # if i == 0:
@@ -172,12 +179,7 @@ def evaluate(d_model, p_model, valid_loader, device, num_sampling, logger, sigma
         #     print(f"[Denoising] Normalized for denoiser: {needs_denorm}\n")
 
 
-        # Denormalize back to original range if needed
-        if needs_denorm:
-            denoised_blur = denoised_blur * 255.0
 
-        # Restore the expected shape: (b, 3, h, w) -> (b, 1, 3, h, w)
-        tensor['inp'] = denoised_blur.unsqueeze(1)
         tensor['trend'] = torch.zeros_like(tensor['inp'])[:, :, :2]
         tensor['gt'] = tensor['gt'].to(device)  # (b, num_gts, 3, h, w)
         b, num_gts, c, h, w = tensor['gt'].shape
