@@ -134,8 +134,9 @@ def evaluate(d_model, p_model, valid_loader, device, num_sampling, logger, sigma
 
         torch.cuda.empty_cache()
 
-        blurry_input = tensor['inp'].squeeze(1)  # Remove the '1' dimension
+        blurry_input = tensor['inp'].squeeze(1)
         estimated_noise = noise_estimator(blurry_input).item()
+        print("Estimated noise:", estimated_noise)
         noise_threshold = 20
         # needs_denoiser = False
 
