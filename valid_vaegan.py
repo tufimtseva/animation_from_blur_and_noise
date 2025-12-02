@@ -134,6 +134,13 @@ def evaluate(d_model, p_model, valid_loader, device, num_sampling, logger, sigma
     for i, tensor in enumerate(tqdm(valid_loader, total=len(valid_loader))):
         tensor['inp'] = tensor['inp'].to(device)  # (b, 1, 3, h, w)
 
+        # LOG THE DATA RANGE
+        print(f"\n=== Sample {i} ===")
+        print(
+            f"Input range: [{tensor['inp'].min():.2f}, {tensor['inp'].max():.2f}]")
+        print(
+            f"Input mean: {tensor['inp'].mean():.2f}, std: {tensor['inp'].std():.2f}")
+
         torch.cuda.empty_cache()
 
         blurry_input = tensor['inp'].squeeze(1)
