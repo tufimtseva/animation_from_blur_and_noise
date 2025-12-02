@@ -11,6 +11,7 @@ from model.embedder import get_embedder
 from model.utils import ckpt_convert, Vgg19
 from torch.nn.parallel import DistributedDataParallel as DDP
 
+
 class NoiseEstimationBranch(nn.Module):
     """Tiny network to estimate noise level from blurry input image!"""
 
@@ -33,12 +34,22 @@ class NoiseEstimationBranch(nn.Module):
         Returns:
             noise_level: Estimated noise level (B, 1) in range [0, 25]
         """
-        x = F.relu(self.conv1(x))
-        x = F.relu(self.conv2(x))
-        x = self.pool(x).flatten(1)
-        noise_level = self.fc(x) * 25.0  # Scale to [0, 25]
-        return noise_level
+        # DEBUG
+        print(f"[NoiseEstimator] Input shape: {x.shape}, range: [{x.min():.3f}, {x.max():.3f}]")
 
+        x = F.relu(self.conv1(x))
+        print(f"[NoiseEstimator] After conv1: range [{x.min():.3f}, {x.max():.3f}]")
+
+        x = F.relu(self.conv2(x))
+        print(f"[NoiseEstimator] After conv2: range [{x.min():.3f}, {x.max():.3f}]")
+
+        x = self.pool(x).flatten(1)
+        print(f"[NoiseEstimator] After pool: shape {x.shape}, range [{x.min():.3f}, {x.max():.3f}]")
+
+        noise_level = self.fc(x) * 25.0  # Scale to [0, 25]
+        print(f"[NoiseEstimator] Output noise_level: {noise_level}")
+
+        return noise_level
 
 class NoiseModulatedDecomposer(nn.Module):
     """
