@@ -136,8 +136,8 @@ def train(local_rank, configs, log_dir):
                 inp_squeezed = tensor['inp'].squeeze(1) / 255.0  # Normalize to [0, 1]
                 noisy_inp, noise_levels = add_gaussian_noise(
                     inp_squeezed,
-                    noise_prob=1.0,  # All samples in this batch get noise
-                    sigma_range=noise_sigma_range
+                    noise_prob = 1.0,  # All samples in this batch get noise
+                    sigma_range = noise_sigma_range
                 )
                 tensor['inp'] = (noisy_inp * 255.0).unsqueeze(1)  # Back to (b, 1, 3, h, w) and 0-255
                 tensor['noise_level'] = noise_levels.to(device)
@@ -227,13 +227,17 @@ def evaluate(model, valid_loader, num_eval, local_rank, writer):
     loss_meter_noisy = AverageMeter()
     psnr_meter_clean = AverageMeter()
     ssim_meter_clean = AverageMeter()
-    lpips_meter_clean = AverageMeter()  # NEW
+    lpips_meter_clean = AverageMeter()
     psnr_meter_noisy = AverageMeter()
     ssim_meter_noisy = AverageMeter()
-    lpips_meter_noisy = AverageMeter()  # NEW
+    lpips_meter_noisy = AverageMeter()
+
+    # NEW: Add meter for noise estimation error
+    noise_est_meter = AverageMeter()
+
     time_stamp = time.time()
 
-    # NEW: Initialize LPIPS model (using AlexNet)
+    # Initialize LPIPS model
     lpips_model = lpips.LPIPS(net='alex').to(device)
 
     # One epoch validation
@@ -267,7 +271,7 @@ def evaluate(model, valid_loader, num_eval, local_rank, writer):
             gt_imgs.reshape(num_gts * b, c, h, w)
         )
 
-        # NEW: LPIPS for clean (expects values in [-1, 1] range)
+        # LPIPS for clean
         pred_normalized = (pred_imgs_clean.reshape(num_gts * b, c, h, w) / 255.0) * 2 - 1
         gt_normalized = (gt_imgs.reshape(num_gts * b, c, h, w) / 255.0) * 2 - 1
         lpips_clean = lpips_model(pred_normalized, gt_normalized).mean()
@@ -275,7 +279,7 @@ def evaluate(model, valid_loader, num_eval, local_rank, writer):
         loss_meter_clean.update(loss_clean.item(), b)
         psnr_meter_clean.update(psnr_clean, num_gts * b)
         ssim_meter_clean.update(ssim_clean, num_gts * b)
-        lpips_meter_clean.update(lpips_clean.item(), num_gts * b)  # NEW
+        lpips_meter_clean.update(lpips_clean.item(), num_gts * b)
 
         # === Test 2: Noisy images (fixed sigma=15) ===
         inp_squeezed = tensor['inp'].squeeze(1) / 255.0  # Normalize to [0, 1]
@@ -295,6 +299,13 @@ def evaluate(model, valid_loader, num_eval, local_rank, writer):
         pred_imgs_noisy = out_tensor_noisy['pred_imgs']
         loss_noisy = out_tensor_noisy['loss']
 
+        # NEW: Get estimated noise level from model output
+        if 'noise_level_est' in out_tensor_noisy:
+            noise_est = out_tensor_noisy['noise_level_est']  # (b, 1)
+            noise_gt = noise_levels  # (b, 1)
+            noise_error = torch.abs(noise_est - noise_gt).mean()
+            noise_est_meter.update(noise_error.item(), b)
+
         # Metrics for noisy
         psnr_noisy = torchmetrics.functional.psnr(
             pred_imgs_noisy.reshape(num_gts * b, c, h, w),
@@ -305,14 +316,14 @@ def evaluate(model, valid_loader, num_eval, local_rank, writer):
             gt_imgs.reshape(num_gts * b, c, h, w)
         )
 
-        # NEW: LPIPS for noisy
+        # LPIPS for noisy
         pred_noisy_normalized = (pred_imgs_noisy.reshape(num_gts * b, c, h, w) / 255.0) * 2 - 1
         lpips_noisy = lpips_model(pred_noisy_normalized, gt_normalized).mean()
 
         loss_meter_noisy.update(loss_noisy.item(), b)
         psnr_meter_noisy.update(psnr_noisy, num_gts * b)
         ssim_meter_noisy.update(ssim_noisy, num_gts * b)
-        lpips_meter_noisy.update(lpips_noisy.item(), num_gts * b)  # NEW
+        lpips_meter_noisy.update(lpips_noisy.item(), num_gts * b)
 
         # Record image results (from clean version)
         if rank == 0 and i == random_idx:
@@ -348,11 +359,16 @@ def evaluate(model, valid_loader, num_eval, local_rank, writer):
         writer.add_scalar('valid/lpips_clean', lpips_meter_clean.avg, num_eval)
         writer.add_scalar('valid/lpips_noisy', lpips_meter_noisy.avg, num_eval)
 
-        msg = 'eval time: {:.1f}s | clean (noise=0): loss={:.5f}, psnr={:.2f}, ssim={:.4f}, lpips={:.4f} | noisy (noise=15): loss={:.5f}, psnr={:.2f}, ssim={:.4f}, lpips={:.4f}'
+        # NEW: Log noise estimation error
+        writer.add_scalar('valid/noise_est_error', noise_est_meter.avg, num_eval)
+
+        # NEW: Updated message with noise estimation
+        msg = 'eval time: {:.1f}s | clean (noise=0): loss={:.5f}, psnr={:.2f}, ssim={:.4f}, lpips={:.4f} | noisy (noise=15): loss={:.5f}, psnr={:.2f}, ssim={:.4f}, lpips={:.4f}, noise_est_error={:.2f}'
         msg = msg.format(
             eval_time_interval,
             loss_meter_clean.avg, psnr_meter_clean.avg, ssim_meter_clean.avg, lpips_meter_clean.avg,
-            loss_meter_noisy.avg, psnr_meter_noisy.avg, ssim_meter_noisy.avg, lpips_meter_noisy.avg
+            loss_meter_noisy.avg, psnr_meter_noisy.avg, ssim_meter_noisy.avg, lpips_meter_noisy.avg,
+            noise_est_meter.avg
         )
         logger(msg, prefix='[valid]')
 
