@@ -140,6 +140,7 @@ def evaluate(d_model, p_model, valid_loader, device, num_sampling, logger, sigma
         # Check data range and normalize if needed
         if blurry_input.max() > 1.0:
             # Data is in [0, 255] range
+            print("Normalizing to 0 - 1")
             blurry_input_normalized = blurry_input / 255.0
             needs_denorm = True
         else:
