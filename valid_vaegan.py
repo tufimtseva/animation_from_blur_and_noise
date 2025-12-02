@@ -87,7 +87,20 @@ def evaluate(d_model, p_model, valid_loader, local_rank, num_sampling, logger, s
         tensor['gt'] = tensor['gt'].to(device)
         b, num_gts, c, h, w = tensor['gt'].shape
 
-        # NEW: Add noise_level to tensor before calling d_model.update
+        # NEW: Actually ADD noise to the input images if sigma > 0
+        if sigma > 0:
+            # Get the blurry input (b, 1, 3, h, w)
+            noisy_inp = tensor['inp'].clone()
+            # Normalize to [0, 1]
+            noisy_inp = noisy_inp / 255.0
+            # Add Gaussian noise with the specified sigma
+            noise = torch.randn_like(noisy_inp) * (sigma / 255.0)
+            noisy_inp = noisy_inp + noise
+            # Clamp and scale back to [0, 255]
+            noisy_inp = torch.clamp(noisy_inp, 0, 1) * 255.0
+            tensor['inp'] = noisy_inp
+
+        # Set the ground truth noise level
         tensor['noise_level'] = torch.full((b, 1), float(sigma), device=device)
 
         if i < NUM_SEQUENCES_TO_SAVE:
@@ -128,6 +141,11 @@ def evaluate(d_model, p_model, valid_loader, local_rank, num_sampling, logger, s
                 # Calculate error compared to ground truth sigma
                 noise_error = abs(est_noise_avg - sigma)
                 noise_error_meter.update(noise_error, b)
+
+                if i == 0 and _ == 0:
+                    print(f"[DEBUG] First batch - GT noise: {sigma}, Estimated: {est_noise_avg:.2f}")
+            else:
+                print(f"[WARNING] 'estimated_noise' not found in out_tensor! Keys: {out_tensor.keys()}")
 
             pred_imgs_for_save = pred_imgs[0]
             gt_imgs_for_save = gt_imgs[0]
