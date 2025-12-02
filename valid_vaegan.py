@@ -141,17 +141,18 @@ def evaluate(d_model, p_model, valid_loader, device, num_sampling, logger, sigma
         if blurry_input.max() > 1.0:
             # Data is in [0, 255] range
             print("Normalizing to 0 - 1")
-            blurry_input_normalized = blurry_input / 255.0
+            blurry_input_normalized = blurry_input.to(device) / 255.0
             needs_denorm = True
         else:
             # Data is already in [0, 1] range
-            blurry_input_normalized = blurry_input
+            blurry_input_normalized = blurry_input.to(device)
             needs_denorm = False
 
-
+        print("Input range to noise estimator:", blurry_input_normalized.min(),
+              blurry_input_normalized.max())
 
         estimated_noise = noise_estimator(blurry_input_normalized).item()
-        print("Estimated noise * 255:", estimated_noise * 255)
+        print("Estimated noise:", estimated_noise)
         noise_threshold = 20
         # needs_denoiser = False
 
