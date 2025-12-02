@@ -51,6 +51,42 @@ def validation(local_rank, d_configs, p_configs, num_sampling, logger):
     noise_estimator = noise_estimator.to(device).eval()
     # noise_estimator = noise_estimator.cuda(local_rank).eval()
 
+    # In your eval code, after loading the noise estimator:
+    print("\n" + "=" * 60)
+    print("NOISE ESTIMATOR DEBUG INFO")
+    print("=" * 60)
+
+    # Check if weights are initialized or trained
+    fc_weights = noise_estimator.fc[0].weight.data
+    fc_bias = noise_estimator.fc[0].bias.data
+
+    print(f"FC layer 1 weight stats:")
+    print(f"  Mean: {fc_weights.mean().item():.6f}")
+    print(f"  Std: {fc_weights.std().item():.6f}")
+    print(f"  Min: {fc_weights.min().item():.6f}")
+    print(f"  Max: {fc_weights.max().item():.6f}")
+
+    print(f"\nFC layer 1 bias: {fc_bias}")
+
+    # Check last layer (the one that outputs noise level)
+    last_fc_weight = noise_estimator.fc[2].weight.data
+    last_fc_bias = noise_estimator.fc[2].bias.data
+
+    print(f"\nLast FC layer weight: {last_fc_weight}")
+    print(f"Last FC layer bias: {last_fc_bias}")
+
+    print("\nConv1 weight stats:")
+    conv1_weights = noise_estimator.conv1.weight.data
+    print(f"  Mean: {conv1_weights.mean().item():.6f}")
+    print(f"  Std: {conv1_weights.std().item():.6f}")
+
+    print("=" * 60 + "\n")
+
+
+
+
+
+
     print("\n" + "=" * 60)
     print("Loading Restormer Denoiser...")
     print("=" * 60)
