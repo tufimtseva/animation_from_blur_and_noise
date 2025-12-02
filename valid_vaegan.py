@@ -133,7 +133,9 @@ def evaluate(d_model, p_model, valid_loader, device, num_sampling, logger, sigma
         tensor['inp'] = tensor['inp'].to(device)  # (b, 1, 3, h, w)
 
         torch.cuda.empty_cache()
-        estimated_noise = noise_estimator(tensor['inp']).item()
+
+        blurry_input = tensor['inp'].squeeze(1)  # Remove the '1' dimension
+        estimated_noise = noise_estimator(blurry_input).item()
         noise_threshold = 20
         # needs_denoiser = False
 
@@ -141,7 +143,7 @@ def evaluate(d_model, p_model, valid_loader, device, num_sampling, logger, sigma
             print("Noise level is too high!, estimated: ", estimated_noise)
 
             # needs_denoiser = True
-            blurry_input = tensor['inp'].squeeze(1)  # Remove the '1' dimension
+
 
             # Check data range and normalize if needed
             if blurry_input.max() > 1.0:
