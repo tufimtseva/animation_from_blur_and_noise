@@ -156,6 +156,7 @@ def train(local_rank, configs, log_dir):
             time_stamp = time.time()
 
             # Print training info
+            # Print training info
             if step % 100 == 0:
                 if rank == 0:
                     writer.add_scalar('learning_rate', model.get_lr(), step)
@@ -166,6 +167,20 @@ def train(local_rank, configs, log_dir):
                     writer.add_scalar('train/noise_level', avg_noise, step)
                     if 'noise_est_loss' in out_tensor:
                         writer.add_scalar('train/noise_est_loss', out_tensor['noise_est_loss'].item(), step)
+
+                    # NEW: Print detailed noise information
+                    print("\n" + "=" * 80)
+                    print(f"[NOISE DEBUG - Step {step}]")
+                    print(f"  Actual noise levels (sigma): {tensor['noise_level'].squeeze().cpu().numpy()}")
+                    if 'noise_level_est' in out_tensor:
+                        est_noise = out_tensor['noise_level_est'].squeeze().cpu().detach().numpy()
+                        print(f"  Estimated noise levels:      {est_noise}")
+                        error = np.abs(tensor['noise_level'].squeeze().cpu().numpy() - est_noise)
+                        print(f"  Absolute error:              {error}")
+                        print(f"  Mean absolute error:         {error.mean():.2f}")
+                    else:
+                        print(f"  Estimated noise levels:      [NOT AVAILABLE IN OUTPUT]")
+                    print("=" * 80 + "\n")
 
                     msg = 'epoch: {:>3}, batch: [{:>5}/{:>5}], time: {:.2f} + {:.2f} sec, loss: {:.5f}, noise: {:.1f}'
                     msg = msg.format(epoch + 1,
