@@ -44,18 +44,18 @@ def validation(local_rank, d_configs, p_configs, num_sampling, logger):
     d_model = MBD(local_rank=local_rank, configs=d_configs)
     p_model = GP(local_rank=local_rank, configs=p_configs)
     #
-    # noise_estimator = NoiseEstimationBranch()
-    # # Load checkpoints
-    # noise_estimator.load(d_configs['resume_dir'], device)
-    # noise_estimator = noise_estimator.to(device).eval()
+    noise_estimator = NoiseEstimationBranch()
+    # Load checkpoints
+    noise_estimator.load(d_configs['resume_dir'], device)
+    noise_estimator = noise_estimator.to(device).eval()
 
 
 
-    if d_model.use_noise_aware:
-        # Access the DDP-wrapped estimator
-        noise_estimator = d_model.noise_estimator.module  # .module to unwrap DDP
-    else:
-        noise_estimator = None
+    # if d_model.use_noise_aware:
+    #     # Access the DDP-wrapped estimator
+    #     noise_estimator = d_model.noise_estimator.module  # .module to unwrap DDP
+    # else:
+    #     noise_estimator = None
 
 
 
