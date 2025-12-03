@@ -133,8 +133,8 @@ def evaluate(d_model, p_model, valid_loader, local_rank, num_sampling, logger, s
             gt_imgs = out_tensor['gt_imgs']
 
             # NEW: Extract estimated noise from output tensor
-            if 'estimated_noise' in out_tensor:
-                est_noise_batch = out_tensor['estimated_noise']  # (b, 1)
+            if 'noise_level_est' in out_tensor:
+                est_noise_batch = out_tensor['noise_level_est']  # (b, 1)
                 est_noise_avg = est_noise_batch.mean().item()
                 noise_est_meter.update(est_noise_avg, b)
 

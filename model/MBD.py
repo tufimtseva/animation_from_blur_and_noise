@@ -34,20 +34,10 @@ class NoiseEstimationBranch(nn.Module):
         Returns:
             noise_level: Estimated noise level (B, 1) in range [0, 25]
         """
-        # DEBUG
-        print(f"[NoiseEstimator] Input shape: {x.shape}, range: [{x.min():.3f}, {x.max():.3f}]")
-
         x = F.relu(self.conv1(x))
-        print(f"[NoiseEstimator] After conv1: range [{x.min():.3f}, {x.max():.3f}]")
-
         x = F.relu(self.conv2(x))
-        print(f"[NoiseEstimator] After conv2: range [{x.min():.3f}, {x.max():.3f}]")
-
         x = self.pool(x).flatten(1)
-        print(f"[NoiseEstimator] After pool: shape {x.shape}, range [{x.min():.3f}, {x.max():.3f}]")
-
-        noise_level = self.fc(x) * 25.0  # Scale to [0, 25]
-        print(f"[NoiseEstimator] Output noise_level: {noise_level}")
+        noise_level = self.fc(x) * 25.0
 
         return noise_level
 
