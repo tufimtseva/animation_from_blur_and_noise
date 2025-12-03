@@ -532,7 +532,6 @@ class BAistPP(Dataset):
                 noisy_inp.append(noisy_img.numpy())  # Convert back to numpy
             tensor['inp'] = noisy_inp
 
-
         tensor['inp'] = torch.from_numpy(np.stack(tensor['inp'], axis=0).transpose((0, 3, 1, 2))).float()
         tensor['gt'] = torch.from_numpy(np.stack(tensor['gt'], axis=0).transpose((0, 3, 1, 2))).float()
         if self.use_trend:

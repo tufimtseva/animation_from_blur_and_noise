@@ -11,6 +11,7 @@ from model.embedder import get_embedder
 from model.utils import ckpt_convert, Vgg19, ckpt_convert2
 from torch.nn.parallel import DistributedDataParallel as DDP
 
+
 class NoiseEstimationBranch(nn.Module):
     """Tiny network to estimate noise level from blurry input image!"""
 
@@ -36,9 +37,9 @@ class NoiseEstimationBranch(nn.Module):
         x = F.relu(self.conv1(x))
         x = F.relu(self.conv2(x))
         x = self.pool(x).flatten(1)
-        noise_level = self.fc(x) * 25.0  # Scale to [0, 25]
-        return noise_level
+        noise_level = self.fc(x) * 25.0
 
+        return noise_level
 
     def load(self, log_dir, device):
         try:
@@ -311,7 +312,8 @@ class MBD:
                 noise_estimation_loss = F.l1_loss(estimated_noise_level, gt_noise_level)
 
             # Store for logging
-            out_tensor['estimated_noise'] = estimated_noise_level.detach()
+            # out_tensor['estimated_noise'] = estimated_noise_level.detach()
+            out_tensor['noise_level_est'] = noise_estimation_loss.detach()
             if gt_noise_level is not None:
                 out_tensor['gt_noise'] = gt_noise_level.detach()
 
