@@ -175,7 +175,7 @@ def evaluate(d_model, p_model, valid_loader, device, num_sampling, logger, sigma
         print("Input range to noise estimator:", blurry_input_normalized.min(),
               blurry_input_normalized.max())
 
-        estimated_noise = noise_estimator(blurry_input_normalized).item()
+        estimated_noise = noise_estimator(blurry_input_normalized).squeeze().cpu().numpy()
         print("Estimated noise:", estimated_noise)
 
         noise_threshold = 20
