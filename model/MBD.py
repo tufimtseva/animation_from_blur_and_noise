@@ -8,7 +8,7 @@ from os.path import join
 from model.flow_estimator import FlowEstimator
 from model.decomposer import Decomposer
 from model.embedder import get_embedder
-from model.utils import ckpt_convert, Vgg19, ckpt_convert2
+from model.utils import ckpt_convert, Vgg19
 from torch.nn.parallel import DistributedDataParallel as DDP
 
 
@@ -44,7 +44,7 @@ class NoiseEstimationBranch(nn.Module):
     def load(self, log_dir, device):
         try:
             self.load_state_dict(
-                ckpt_convert2(torch.load(join(log_dir, 'noise_estimator.pth'),
+                ckpt_convert(torch.load(join(log_dir, 'noise_estimator.pth'),
                                         map_location=device)))
             print("[MBD] ✓ Loaded noise estimator checkpoint")
         except:
