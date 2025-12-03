@@ -59,46 +59,6 @@ def validation(local_rank, d_configs, p_configs, num_sampling, logger):
 
 
 
-
-
-    # noise_estimator = noise_estimator.cuda(local_rank).eval()
-
-    # # In your eval code, after loading the noise estimator:
-    # print("\n" + "=" * 60)
-    # print("NOISE ESTIMATOR DEBUG INFO")
-    # print("=" * 60)
-    #
-    # # Check if weights are initialized or trained
-    # fc_weights = noise_estimator.fc[0].weight.data
-    # fc_bias = noise_estimator.fc[0].bias.data
-    #
-    # print(f"FC layer 1 weight stats:")
-    # print(f"  Mean: {fc_weights.mean().item():.6f}")
-    # print(f"  Std: {fc_weights.std().item():.6f}")
-    # print(f"  Min: {fc_weights.min().item():.6f}")
-    # print(f"  Max: {fc_weights.max().item():.6f}")
-    #
-    # print(f"\nFC layer 1 bias: {fc_bias}")
-    #
-    # # Check last layer (the one that outputs noise level)
-    # last_fc_weight = noise_estimator.fc[2].weight.data
-    # last_fc_bias = noise_estimator.fc[2].bias.data
-    #
-    # print(f"\nLast FC layer weight: {last_fc_weight}")
-    # print(f"Last FC layer bias: {last_fc_bias}")
-    #
-    # print("\nConv1 weight stats:")
-    # conv1_weights = noise_estimator.conv1.weight.data
-    # print(f"  Mean: {conv1_weights.mean().item():.6f}")
-    # print(f"  Std: {conv1_weights.std().item():.6f}")
-    #
-    # print("=" * 60 + "\n")
-
-
-
-
-
-
     print("\n" + "=" * 60)
     print("Loading Restormer Denoiser...")
     print("=" * 60)
@@ -130,8 +90,6 @@ def validation(local_rank, d_configs, p_configs, num_sampling, logger):
     except FileNotFoundError:
         print(
             "❌ Restormer weights not found at pretrained_models/gaussian_color_denoising_sigma25.pth")
-        print(
-            "   Download: wget https://github.com/swz30/Restormer/releases/download/v1.0/gaussian_color_denoising_sigma25.pth -P pretrained_models/")
         exit(1)
     except Exception as e:
         print(f"❌ Failed to load Restormer: {e}")
@@ -188,8 +146,9 @@ def evaluate(d_model, p_model, valid_loader, device, num_sampling, logger, sigma
     os.makedirs(noise_dir, exist_ok=True)
 
     for i, tensor in enumerate(tqdm(valid_loader, total=len(valid_loader))):
-        tensor['trend'] = torch.zeros_like(tensor['inp'])[:, :, :2]
+
         tensor['inp'] = tensor['inp'].to(device)  # (b, 1, 3, h, w)
+        tensor['trend'] = torch.zeros_like(tensor['inp'])[:, :, :2]
 
         # LOG THE DATA RANGE
         print(f"\n=== Sample {i} ===")
@@ -218,64 +177,6 @@ def evaluate(d_model, p_model, valid_loader, device, num_sampling, logger, sigma
 
         estimated_noise = noise_estimator(blurry_input_normalized).item()
         print("Estimated noise:", estimated_noise)
-
-        # # === CORRECTED DEBUG ===
-        # print("\n" + "=" * 60)
-        # print("DETAILED FORWARD PASS DEBUG")
-        # print("=" * 60)
-        #
-        # with torch.no_grad():
-        #     x = blurry_input_normalized
-        #     print(f"Input shape: {x.shape}")
-        #
-        #     # Conv layers
-        #     x = noise_estimator.conv1(x)
-        #     print(
-        #         f"\nAfter conv1 (before ReLU): mean={x.mean():.4f}, range=[{x.min():.4f}, {x.max():.4f}]")
-        #     x = F.relu(x)
-        #     print(f"After conv1 ReLU: mean={x.mean():.4f}")
-        #
-        #     x = noise_estimator.conv2(x)
-        #     print(
-        #         f"\nAfter conv2 (before ReLU): mean={x.mean():.4f}, range=[{x.min():.4f}, {x.max():.4f}]")
-        #     x = F.relu(x)
-        #     print(f"After conv2 ReLU: mean={x.mean():.4f}")
-        #
-        #     # Pool
-        #     x = noise_estimator.pool(x)
-        #     x_flat = x.flatten(1)
-        #     print(f"\nAfter pooling and flatten: shape={x_flat.shape}")
-        #     print(f"  Pooled values: {x_flat[0]}")
-        #
-        #     # FC network step by step
-        #     print(f"\n--- FC Network ---")
-        #     x_fc1 = noise_estimator.fc[0](x_flat)  # Linear(16, 8)
-        #     print(f"After FC1 Linear(16→8):")
-        #     print(f"  Values: {x_fc1[0]}")
-        #
-        #     x_fc1_relu = noise_estimator.fc[1](x_fc1)  # ReLU
-        #     print(f"After FC1 ReLU:")
-        #     print(f"  Values: {x_fc1_relu[0]}")
-        #     print(f"  Non-zero: {(x_fc1_relu > 0).sum().item()}/8")
-        #
-        #     x_fc2 = noise_estimator.fc[2](x_fc1_relu)  # Linear(8, 1) ← FIXED
-        #     print(f"\nAfter FC2 Linear(8→1):")
-        #     print(f"  Value: {x_fc2.item():.6f}")
-        #
-        #     x_sig = noise_estimator.fc[3](x_fc2)  # Sigmoid
-        #     print(f"After Sigmoid:")
-        #     print(f"  Value: {x_sig.item():.6f}")
-        #
-        #     x_final = x_sig * 25.0
-        #     print(f"Final (* 25):")
-        #     print(f"  Value: {x_final.item():.6f}")
-        #
-        # print("=" * 60 + "\n")
-
-        # # Compare with actual forward
-        # estimated_noise = noise_estimator(blurry_input_normalized).item()
-        # print(f"Actual forward() result: {estimated_noise:.6f}\n")
-
 
         noise_threshold = 20
         # needs_denoiser = False
