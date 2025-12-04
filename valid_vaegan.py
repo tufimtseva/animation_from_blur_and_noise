@@ -9,7 +9,7 @@ import torch.distributed as dist
 import torch.nn.functional as F
 from argparse import ArgumentParser
 from torch.utils.data import DataLoader
-from model.MBD import MBD, NoiseEstimationBranch
+from model.MBD import MBD, ImprovedNoiseEstimationBranch
 from model.utils import AverageMeter
 from os.path import join
 from logger import Logger
@@ -44,7 +44,7 @@ def validation(local_rank, d_configs, p_configs, num_sampling, logger):
     d_model = MBD(local_rank=local_rank, configs=d_configs)
     p_model = GP(local_rank=local_rank, configs=p_configs)
     #
-    noise_estimator = NoiseEstimationBranch()
+    noise_estimator = ImprovedNoiseEstimationBranch()
     # Load checkpoints
     noise_estimator.load(d_configs['resume_dir'], device)
     noise_estimator = noise_estimator.to(device).eval()
