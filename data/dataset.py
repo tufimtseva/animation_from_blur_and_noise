@@ -109,7 +109,7 @@ class BAistPP(Dataset):
     def __init__(self, set_type, root_dir, suffix, num_gts, num_fut, num_past,
                  video_list=None, aug_args=None, use_trend=False,
                  temporal_step=1,
-                 use_flow=False, noisy=False, noise_level = 10, **kwargs):
+                 use_flow=False, noisy=False, noise_level=10, **kwargs):
 
         self.use_trend = False
         self.use_flow = False
@@ -123,23 +123,60 @@ class BAistPP(Dataset):
         assert isinstance(root_dir, list)
         self.samples = []
 
-        selected_test_videos = [
-            "GOPR0384_11_00", "GOPR0385_11_01", "GOPR0410_11_00",
-            "GOPR0862_11_00", "GOPR0869_11_00", "GOPR0881_11_01",
-            "GOPR0384_11_05", "GOPR0396_11_00", "GOPR0854_11_00",
-            "GOPR0868_11_00", "GOPR0871_11_00"
+        # Define train and test video lists (from your actual GoPro folder)
+        train_videos = [
+            "GOPR0372_07_00", "GOPR0372_07_01", "GOPR0374_11_00",
+            "GOPR0374_11_01", "GOPR0374_11_02", "GOPR0374_11_03",
+            "GOPR0378_13_00", "GOPR0379_11_00", "GOPR0380_11_00",
+            "GOPR0384_11_01", "GOPR0384_11_02", "GOPR0384_11_03",
+            "GOPR0384_11_04", "GOPR0385_11_00", "GOPR0386_11_00",
+            "GOPR0477_11_00", "GOPR0857_11_00", "GOPR0868_11_01",
+            "GOPR0868_11_02", "GOPR0871_11_01", "GOPR0881_11_00",
+            "GOPR0884_11_00"
         ]
+
+        test_videos = [
+            "GOPR0384_11_00", "GOPR0384_11_05", "GOPR0385_11_01",
+            "GOPR0396_11_00", "GOPR0410_11_00", "GOPR0854_11_00",
+            "GOPR0862_11_00", "GOPR0868_11_00", "GOPR0869_11_00",
+            "GOPR0871_11_00", "GOPR0881_11_01"
+        ]
+
+        # Choose split based on set_type
+        if set_type == 'train':
+            split_folder = 'train'
+            selected_videos = train_videos
+        else:  # 'valid' or 'test'
+            split_folder = 'test'
+            selected_videos = test_videos
+
+        print(f"[INFO] Loading {set_type} data from {split_folder}/ folder")
 
         for rdir in root_dir:
             if rdir.endswith('/'):
                 rdir = rdir[:-1]
 
-            test_root = rdir + '/test'  # FIX: Append /test here
+            data_root = os.path.join(rdir, split_folder)
+
+            # Auto-detect videos if folder exists
+            if os.path.exists(data_root):
+                available_videos = [d for d in os.listdir(data_root)
+                                    if os.path.isdir(os.path.join(data_root, d))]
+                # Use intersection of selected and available
+                videos_to_use = [v for v in selected_videos if v in available_videos]
+
+                # If no match, use all available videos
+                if not videos_to_use:
+                    videos_to_use = available_videos
+                    print(f"[WARN] No matching videos found, using all {len(videos_to_use)} available")
+            else:
+                print(f"[ERROR] Path does not exist: {data_root}")
+                continue
 
             try:
                 new_samples = self.gen_samples_gopro(
-                    test_root,
-                    selected_test_videos,
+                    data_root,
+                    videos_to_use,
                     suffix,
                     num_gts,
                     num_fut,
@@ -152,7 +189,7 @@ class BAistPP(Dataset):
                 traceback.print_exc()
 
         self.samples = self.samples[::temporal_step]
-        print(f"[INFO] Loaded {len(self.samples)} samples")
+        print(f"[INFO] Loaded {len(self.samples)} {set_type} samples")
 
     def gen_transform(self, aug_args):
         """
@@ -209,12 +246,12 @@ class BAistPP(Dataset):
             valid_indices = sorted(set(blur_indices) & set(sharp_indices))
             print(f"[DEBUG] Valid indices: {len(valid_indices)}")
 
-            if len(valid_indices) < 81:
-                print(f"[DEBUG] SKIP - not enough frames")
-                continue
+            # if len(valid_indices) < 3:
+            #     print(f"[DEBUG] SKIP - not enough frames")
+            #     continue
 
             count = 0
-            for i in range(40, len(valid_indices) - 40):
+            for i in range(1, len(valid_indices) - 1):
                 frame_num = valid_indices[i]
 
                 sample = {
@@ -228,13 +265,9 @@ class BAistPP(Dataset):
 
                 inp_path = join(inp_dir_path, inp_fmt.format(frame_num))
                 gt_path = join(gt_dir_path, gt_fmt.format(frame_num))
-                print(
-                    f"[DEBUG] Checking {inp_path}, exists={os.path.exists(inp_path)}")
-                print(
-                    f"[DEBUG] Checking {gt_path}, exists={os.path.exists(gt_path)}")
+
                 if exists(inp_path) and exists(gt_path):
                     sample['inp'].append(inp_path)
-                    print("hio")
                     sample['gt'] += [gt_path] * num_gts
                     samples.append(sample)
                     count += 1
@@ -353,49 +386,6 @@ class BAistPP(Dataset):
                 return i
         return FileNotFoundError
 
-    # def load_sample(self, sample):
-    #     """
-    #     Load images (RGB), annotations (bboxes) and trend guidance from the paths in the sample dict to store as tensor dict
-    #     """
-    #     tensor = {}
-    #     try:
-    #         # load data and annotation (bbox) for input
-    #         tensor['inp'] = [cv2.cvtColor(cv2.imread(img_path), cv2.COLOR_BGR2RGB) for img_path in sample['inp']]
-    #         h, w, _ = tensor['inp'][0].shape
-    #         tensor['inp_bbox'] = []
-    #         for anno_path in sample['inp_anno']:
-    #             with open(anno_path, 'rb') as f:
-    #                 anno_data = pickle.load(f)
-    #             tensor['inp_bbox'].append(anno_data['bbox'])
-    #         # load data for gt
-    #         tensor['gt'] = [cv2.cvtColor(cv2.imread(img_path), cv2.COLOR_BGR2RGB) for img_path in sample['gt']]
-    #         if self.use_trend:
-    #             # load trend guidance
-    #             tensor['trend'] = []
-    #             for trend_path in sample['trend']:
-    #                 trend = np.load(trend_path)
-    #                 # recover the size of the trend as input image
-    #                 trend = cv2.resize(trend, (w, h), interpolation=cv2.INTER_NEAREST)
-    #                 tensor['trend'].append(trend)
-    #         if self.use_flow:
-    #             # load optical flow
-    #             tensor['flow'] = []
-    #             for flow_path in sample['flow']:
-    #                 flow = np.load(flow_path)
-    #                 flow_x = flow[:, :, 0::2]
-    #                 flow_y = flow[:, :, 1::2]
-    #                 flow_x = np.mean(flow_x, axis=-1, keepdims=True)
-    #                 flow_y = np.mean(flow_y, axis=-1, keepdims=True)
-    #                 flow = np.concatenate([flow_x, flow_y], axis=-1)
-    #                 flow = cv2.resize(flow, (w, h), interpolation=cv2.INTER_AREA)  # (h, w, 2)
-    #                 tensor['flow'].append(flow)
-    #         # load video name
-    #         tensor['video'] = sample['video']
-    #     except:
-    #         # print(sample['inp'])
-    #         return None
-    #     return tensor
-
     def load_sample(self, sample):
         """
         Load images (RGB) and resize to fit in GPU memory
@@ -408,8 +398,7 @@ class BAistPP(Dataset):
             tensor['inp'] = []
             for img_path in sample['inp']:
                 img = cv2.cvtColor(cv2.imread(img_path), cv2.COLOR_BGR2RGB)
-                img = cv2.resize(img, target_size,
-                                 interpolation=cv2.INTER_LINEAR)
+                img = cv2.resize(img, target_size, interpolation=cv2.INTER_LINEAR)
                 tensor['inp'].append(img)
 
             h, w, _ = tensor['inp'][0].shape
@@ -421,16 +410,14 @@ class BAistPP(Dataset):
             tensor['gt'] = []
             for img_path in sample['gt']:
                 img = cv2.cvtColor(cv2.imread(img_path), cv2.COLOR_BGR2RGB)
-                img = cv2.resize(img, target_size,
-                                 interpolation=cv2.INTER_LINEAR)
+                img = cv2.resize(img, target_size, interpolation=cv2.INTER_LINEAR)
                 tensor['gt'].append(img)
 
             if self.use_trend:
                 tensor['trend'] = []
                 for trend_path in sample['trend']:
                     trend = np.load(trend_path)
-                    trend = cv2.resize(trend, target_size,
-                                       interpolation=cv2.INTER_NEAREST)
+                    trend = cv2.resize(trend, target_size, interpolation=cv2.INTER_NEAREST)
                     tensor['trend'].append(trend)
 
             if self.use_flow:
@@ -442,16 +429,13 @@ class BAistPP(Dataset):
                     flow_x = np.mean(flow_x, axis=-1, keepdims=True)
                     flow_y = np.mean(flow_y, axis=-1, keepdims=True)
                     flow = np.concatenate([flow_x, flow_y], axis=-1)
-                    flow = cv2.resize(flow, target_size,
-                                      interpolation=cv2.INTER_AREA)
+                    flow = cv2.resize(flow, target_size, interpolation=cv2.INTER_AREA)
                     tensor['flow'].append(flow)
 
             tensor['video'] = sample['video']
         except:
             return None
         return tensor
-
-
 
     def replay_image_aug(self, tensor, transform):
         """
@@ -511,8 +495,8 @@ class BAistPP(Dataset):
         tensor = self.replay_image_aug(tensor, self.img_transform)
         tensor = self.replay_video_aug(tensor, self.vid_transform)
         if self.noisy:
-            print("noisy? ", self.noisy)
-            print("Adding noise with ", self.sigma)
+            # print("noisy? ", self.noisy)
+            # print("Adding noise with ", self.sigma)
             inp = [torch.from_numpy(img).float() for img in tensor['inp']]
             tensor['inp'] = [self.add_noise(img, self.sigma) for img in inp]
         tensor['inp'] = torch.from_numpy(np.stack(tensor['inp'], axis=0).transpose((0, 3, 1, 2))).float()
