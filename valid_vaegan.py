@@ -17,6 +17,7 @@ from model.bicyclegan.global_model import GuidePredictor as GP
 from tqdm import tqdm
 from torch.distributed.elastic.multiprocessing.errors import record
 from data.dataset import BAistPP as BDDataset
+from restormer_arch import Restormer
 
 loss_fn_alex = lpips.LPIPS(net='alex').to('cuda:0')
 import torchvision.utils as vutils
@@ -41,6 +42,69 @@ def validation(local_rank, d_configs, p_configs, num_sampling, logger):
     p_model = GP(local_rank=local_rank, configs=p_configs)
 
     dataset_args = d_configs['dataset_args']
+
+    for noise_level in [0, 5, 10, 20]:
+        print(f"[INFO] Testing with noise_level={noise_level}")
+
+        dataset_args_override = dataset_args.copy()
+        dataset_args_override['noisy'] = (noise_level > 0)
+        dataset_args_override['noise_level'] = noise_level
+
+        valid_dataset = BDDataset(set_type='valid', **dataset_args_override)
+        valid_loader = DataLoader(valid_dataset,
+                                  batch_size=1,
+                                  num_workers=d_configs['num_workers'],
+                                  pin_memory=True)
+
+        evaluate(d_model, p_model, valid_loader, local_rank, num_sampling, logger, valid_dataset.sigma)
+
+    logger.close()
+def validation_restormer(local_rank, d_configs, p_configs, num_sampling, logger):
+    torch.backends.cudnn.benchmark = True
+
+    d_model = MBD(local_rank=local_rank, configs=d_configs)
+    p_model = GP(local_rank=local_rank, configs=p_configs)
+
+    dataset_args = d_configs['dataset_args']
+
+
+    print("\n" + "=" * 60)
+    print("Loading Restormer Denoiser...")
+    print("=" * 60)
+
+    try:
+        denoiser = Restormer(
+            inp_channels=3,
+            out_channels=3,
+            dim=48,
+            num_blocks=[4, 6, 6, 8],
+            num_refinement_blocks=4,
+            heads=[1, 2, 4, 8],
+            ffn_expansion_factor=2.66,
+            bias=False,
+            LayerNorm_type='WithBias',
+            dual_pixel_task=False
+        )
+
+        checkpoint_path = 'pretrained_models/gaussian_color_denoising_sigma25.pth'
+        checkpoint = torch.load(checkpoint_path,
+                                map_location=f'cuda:{local_rank}')
+        denoiser.load_state_dict(checkpoint['params'], strict=False)
+        denoiser = denoiser.cuda(local_rank).eval()
+
+        print(f"✅ Restormer loaded successfully!")
+        print(f"   Model path: {checkpoint_path}")
+        print(f"   Device: cuda:{local_rank}")
+
+    except FileNotFoundError:
+        print(
+            "❌ Restormer weights not found at pretrained_models/gaussian_color_denoising_sigma25.pth")
+        exit(1)
+    except Exception as e:
+        print(f"❌ Failed to load Restormer: {e}")
+        exit(1)
+
+    print("=" * 60 + "\n")
 
     for noise_level in [0, 5, 10, 20]:
         print(f"[INFO] Testing with noise_level={noise_level}")
@@ -213,7 +277,7 @@ def main():
     rank = dist.get_rank()
     init_seeds(seed=rank)
 
-    validation(local_rank=args.local_rank, d_configs=d_configs, p_configs=p_configs, num_sampling=num_sampling,
+    validation_restormer(local_rank=args.local_rank, d_configs=d_configs, p_configs=p_configs, num_sampling=num_sampling,
                logger=logger)
     dist.destroy_process_group()
 
