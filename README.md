@@ -36,7 +36,7 @@ You may place this directory anywhere, but when running scripts, use:
 ```
 
 ## Pretrained Weights
-Google Drive download link: https://drive.google.com/drive/folders/14tZ5FIxBKZVbwp3dWi1EWjw1SpngAqhE?usp=sharing
+Google Drive download link: https://drive.google.com/drive/folders/14tZ5FIxBKZVbwp3dWi1EWjw1SpngAqhE?usp=sharing <br>
 You may store checkpoints anywhere.
 Pass their paths using ```--predictor_resume_dir``` and ```--decomposer_resume_dir```
 
