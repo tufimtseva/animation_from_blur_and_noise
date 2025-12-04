@@ -210,7 +210,6 @@ def evaluate(model, valid_loader, num_eval, local_rank, writer):
         )
         logger(msg, prefix='[valid]')
 
-
 if __name__ == '__main__':
     # load args & configs
     parser = ArgumentParser(description='Blur Decomposition')
