@@ -15,7 +15,6 @@ from model.utils import AverageMeter
 from os.path import join
 from logger import Logger
 
-
 def init_seeds(seed=0):
     random.seed(seed)
     np.random.seed(seed)
