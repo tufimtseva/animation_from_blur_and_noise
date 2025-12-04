@@ -12,44 +12,190 @@ from model.utils import ckpt_convert, Vgg19
 from torch.nn.parallel import DistributedDataParallel as DDP
 
 
-class NoiseEstimationBranch(nn.Module):
-    """Tiny network to estimate noise level from blurry input image!"""
+# class NoiseEstimationBranch(nn.Module):
+#     """Tiny network to estimate noise level from blurry input image!"""
+#
+#     def __init__(self):
+#         super().__init__()
+#         self.conv1 = nn.Conv2d(3, 32, 3, padding=1)
+#         self.conv2 = nn.Conv2d(32, 16, 3, padding=1)
+#         self.pool = nn.AdaptiveAvgPool2d(1)
+#         self.fc = nn.Sequential(
+#             nn.Linear(16, 8),
+#             nn.ReLU(),
+#             nn.Linear(8, 1),
+#             nn.Sigmoid()  # Output: noise level ∈ [0, 1]
+#         )
+#
+#     def forward(self, x):
+#         """
+#         Args:
+#             x: Input blurry image (B, 3, H, W) - already normalized to [0, 1]
+#         Returns:
+#             noise_level: Estimated noise level (B, 1) in range [0, 25]
+#         """
+#         x = F.relu(self.conv1(x))
+#         x = F.relu(self.conv2(x))
+#         x = self.pool(x).flatten(1)
+#         noise_level = self.fc(x) * 25.0
+#
+#         return noise_level
+#
+#     def load(self, log_dir, device):
+#         try:
+#             self.load_state_dict(
+#                 ckpt_convert(torch.load(join(log_dir, 'noise_estimator.pth'),
+#                                         map_location=device)))
+#             print("[MBD] ✓ Loaded noise estimator checkpoint")
+#         except:
+#             print(
+#                 "[MBD] ⚠ No noise estimator checkpoint found, starting from scratch")
+
+
+# ============================================================================
+# ENHANCED LOSS FUNCTION - THIS IS KEY!
+# ============================================================================
+
+def noise_estimation_loss_fn(pred_noise, gt_noise):
+    """
+    Combined loss that's much more aggressive about correctness
+
+    This uses:
+    1. L1 loss (more robust to outliers than MSE)
+    2. Relative error penalty (punishes percentage mistakes)
+    3. High-noise penalty (extra punishment for missing high noise)
+    4. Zero-noise penalty (extra punishment for missing clean images)
+    """
+    # L1 loss
+    l1_loss = F.l1_loss(pred_noise, gt_noise)
+
+    # Relative error loss (punishes percentage mistakes)
+    # This prevents the model from just predicting ~12 for everything
+    relative_error = torch.abs(pred_noise - gt_noise) / (gt_noise + 1.0)
+    relative_loss = relative_error.mean()
+
+    # High-noise penalty (extra punishment when gt_noise > 30)
+    high_noise_mask = (gt_noise > 30).float()
+    high_noise_penalty = (
+                high_noise_mask * torch.abs(pred_noise - gt_noise)).mean()
+
+    # Zero-noise penalty (extra punishment when gt_noise == 0)
+    zero_noise_mask = (gt_noise < 0.5).float()
+    zero_noise_penalty = (zero_noise_mask * torch.abs(pred_noise)).mean()
+
+    # Combine losses
+    total_loss = (
+            l1_loss +
+            0.5 * relative_loss +
+            0.3 * high_noise_penalty +
+            0.3 * zero_noise_penalty
+    )
+
+    return total_loss
+
+
+# ============================================================================
+# IMPROVED NOISE ESTIMATOR
+# ============================================================================
+
+class ImprovedNoiseEstimationBranch(nn.Module):
+    """Enhanced network for robust noise level estimation"""
 
     def __init__(self):
         super().__init__()
-        self.conv1 = nn.Conv2d(3, 32, 3, padding=1)
-        self.conv2 = nn.Conv2d(32, 16, 3, padding=1)
+
+        # Stronger feature extraction backbone
+        self.conv1 = nn.Conv2d(3, 64, 3, padding=1)
+        self.bn1 = nn.BatchNorm2d(64)
+
+        self.conv2 = nn.Conv2d(64, 64, 3, padding=1)
+        self.bn2 = nn.BatchNorm2d(64)
+
+        self.conv3 = nn.Conv2d(64, 128, 3, stride=2, padding=1)
+        self.bn3 = nn.BatchNorm2d(128)
+
+        self.conv4 = nn.Conv2d(128, 128, 3, padding=1)
+        self.bn4 = nn.BatchNorm2d(128)
+
         self.pool = nn.AdaptiveAvgPool2d(1)
+
+        # Stronger prediction head
         self.fc = nn.Sequential(
-            nn.Linear(16, 8),
+            nn.Linear(128, 64),
             nn.ReLU(),
-            nn.Linear(8, 1),
-            nn.Sigmoid()  # Output: noise level ∈ [0, 1]
+            nn.Dropout(0.1),
+            nn.Linear(64, 32),
+            nn.ReLU(),
+            nn.Dropout(0.1),
+            nn.Linear(32, 1)
         )
+
+        # Better initialization
+        for m in self.modules():
+            if isinstance(m, nn.Conv2d):
+                nn.init.kaiming_normal_(m.weight, mode='fan_out',
+                                        nonlinearity='relu')
+            elif isinstance(m, nn.Linear):
+                nn.init.kaiming_normal_(m.weight, mode='fan_out',
+                                        nonlinearity='relu')
+
+        # Initialize final layer to predict middle of range
+        nn.init.normal_(self.fc[-1].weight, mean=0, std=0.001)
+        nn.init.constant_(self.fc[-1].bias, 25.0)
 
     def forward(self, x):
         """
         Args:
-            x: Input blurry image (B, 3, H, W) - already normalized to [0, 1]
+            x: Input image (B, 3, H, W) - expects [0, 255] range
         Returns:
-            noise_level: Estimated noise level (B, 1) in range [0, 25]
+            noise_level: Estimated noise level (B, 1) in range [0, 50]
         """
-        x = F.relu(self.conv1(x))
-        x = F.relu(self.conv2(x))
-        x = self.pool(x).flatten(1)
-        noise_level = self.fc(x) * 25.0
+        # CRITICAL: Normalize to [0, 1] for stable training
+        if x.max() > 1.0:
+            x = x / 255.0
+
+        # Feature extraction with residual-like connections
+        x1 = F.relu(self.bn1(self.conv1(x)))
+        x2 = F.relu(self.bn2(self.conv2(x1))) + x1  # Skip connection
+
+        x3 = F.relu(self.bn3(self.conv3(x2)))
+        x4 = F.relu(self.bn4(self.conv4(x3))) + x3  # Skip connection
+
+        # Global pooling and prediction
+        x = self.pool(x4).flatten(1)
+        noise_level = self.fc(x)
+
+        # Clamp to valid range
+        noise_level = torch.clamp(noise_level, 0, 50)
 
         return noise_level
 
     def load(self, log_dir, device):
+        """Load checkpoint for noise estimator (for valid_vaegan.py compatibility)"""
+        from os.path import join
+        checkpoint_path = join(log_dir, 'noise_estimator.pth')
         try:
-            self.load_state_dict(
-                ckpt_convert(torch.load(join(log_dir, 'noise_estimator.pth'),
-                                        map_location=device)))
-            print("[MBD] ✓ Loaded noise estimator checkpoint")
-        except:
+            checkpoint = torch.load(checkpoint_path, map_location=device)
+            # Handle both DDP and non-DDP checkpoints
+            if any(k.startswith('module.') for k in checkpoint.keys()):
+                # Remove 'module.' prefix from DDP checkpoint
+                from collections import OrderedDict
+                new_checkpoint = OrderedDict()
+                for k, v in checkpoint.items():
+                    name = k[7:] if k.startswith('module.') else k
+                    new_checkpoint[name] = v
+                self.load_state_dict(new_checkpoint)
+            else:
+                self.load_state_dict(checkpoint)
             print(
-                "[MBD] ⚠ No noise estimator checkpoint found, starting from scratch")
+                f"[NoiseEstimationBranch] ✓ Loaded checkpoint from {checkpoint_path}")
+        except FileNotFoundError:
+            print(
+                f"[NoiseEstimationBranch] ⚠ No checkpoint found at {checkpoint_path}")
+            raise
+        except Exception as e:
+            print(f"[NoiseEstimationBranch] ❌ Failed to load checkpoint: {e}")
+
 
 class NoiseModulatedDecomposer(nn.Module):
     """
@@ -155,7 +301,7 @@ class MBD:
 
         # NEW: Wrap decomposers with noise-aware FiLM modulation
         if self.use_noise_aware:
-            self.noise_estimator = NoiseEstimationBranch()
+            self.noise_estimator = ImprovedNoiseEstimationBranch()  # CHANGED: Use improved version
             self.noise_estimator.to(device=self.device)
 
             # Get feature channels from config
@@ -209,7 +355,7 @@ class MBD:
             self.vgg = Vgg19().to(self.device)
 
         # NEW: Loss weight for noise estimation
-        self.noise_loss_weight = 0.1
+        self.noise_loss_weight = 1.0
         if 'noise_loss_weight' in configs:
             self.noise_loss_weight = configs['noise_loss_weight']
 
@@ -287,65 +433,85 @@ class MBD:
         else:
             self.eval()
         out_tensor = {}
-        blur_img, sharp_imgs, trend_img = inp_tensor['inp'], inp_tensor['gt'], inp_tensor['trend']
+        blur_img, sharp_imgs, trend_img = inp_tensor['inp'], inp_tensor['gt'], \
+        inp_tensor['trend']
 
         # NEW: Get noise level (either ground truth or estimated)
         gt_noise_level = inp_tensor.get('noise_level', None)
 
         b, n, c, h, w = blur_img.shape
-        blur_img = blur_img.reshape(b, n * c, h, w)  # shape (b, 1 * 3, h, w)
+        blur_img_reshaped = blur_img.reshape(b, n * c, h,
+                                             w)  # shape (b, 1 * 3, h, w) - STILL [0, 255]
         b, n, tc, h, w = trend_img.shape
         trend_img = trend_img.reshape(b, n * tc, h, w)  # shape (b, 1 * 2, h, w)
-        blur_img = blur_img / self.val_range
-        sharp_imgs = sharp_imgs / self.val_range
 
-        # NEW: Estimate noise level
+        # === CRITICAL: Estimate noise level BEFORE normalization ===
+        # The noise estimator will auto-detect range and normalize internally
         estimated_noise_level = None
-        noise_estimation_loss = torch.tensor(0.0).to(self.device)
+        noise_est_loss = torch.tensor(0.0).to(self.device)
 
         if self.use_noise_aware:
-            # Estimate noise from blurry input
-            estimated_noise_level = self.noise_estimator(blur_img)  # (B, 1)
+            # Pass input in [0, 255] range - noise estimator handles normalization
+            estimated_noise_level = self.noise_estimator(
+                blur_img_reshaped)  # (B, 1)
 
-            # If ground truth noise is provided, calculate noise estimation loss
+            # CHANGED: Use enhanced loss function instead of MSE
             if gt_noise_level is not None:
-                noise_estimation_loss = F.l1_loss(estimated_noise_level, gt_noise_level)
+                noise_est_loss = noise_estimation_loss_fn(estimated_noise_level,
+                                                          gt_noise_level)
 
-            # Store for logging
-            # out_tensor['estimated_noise'] = estimated_noise_level.detach()
-            out_tensor['noise_level_est'] = noise_estimation_loss.detach()
+            out_tensor['noise_level_est'] = estimated_noise_level.detach()
             if gt_noise_level is not None:
                 out_tensor['gt_noise'] = gt_noise_level.detach()
+                out_tensor['noise_est_loss'] = noise_est_loss.detach()
+
+        # NOW normalize for decomposer
+        blur_img_normalized = blur_img_reshaped / self.val_range
+        sharp_imgs = sharp_imgs / self.val_range
 
         # Forward propagation
         all_pred_imgs = []
 
         # First stage
         if self.residual_blur:
-            pred_imgs = self.first_stage(blur_img, trend_img, estimated_noise_level) + blur_img.unsqueeze(dim=1)
+            pred_imgs = self.first_stage(blur_img_normalized, trend_img,
+                                         estimated_noise_level) + blur_img_normalized.unsqueeze(
+                dim=1)
         else:
-            pred_imgs = self.first_stage(blur_img, trend_img, estimated_noise_level)
+            pred_imgs = self.first_stage(blur_img_normalized, trend_img,
+                                         estimated_noise_level)
         all_pred_imgs.append(pred_imgs)
 
         for _ in range(self.num_iters):
             if training:
                 if (hybrid_flag == 0) or (not self.hybrid):
                     if self.residual:
-                        pred_imgs = pred_imgs + self.second_stage(blur_img, pred_imgs, estimated_noise_level)
+                        pred_imgs = pred_imgs + self.second_stage(
+                            blur_img_normalized, pred_imgs,
+                            estimated_noise_level)
                     else:
-                        pred_imgs = self.second_stage(blur_img, pred_imgs, estimated_noise_level)
+                        pred_imgs = self.second_stage(blur_img_normalized,
+                                                      pred_imgs,
+                                                      estimated_noise_level)
                 elif hybrid_flag == 1:
                     if self.residual:
-                        pred_imgs = pred_imgs + self.second_stage(blur_img, sharp_imgs, estimated_noise_level)
+                        pred_imgs = pred_imgs + self.second_stage(
+                            blur_img_normalized, sharp_imgs,
+                            estimated_noise_level)
                     else:
-                        pred_imgs = self.second_stage(blur_img, sharp_imgs, estimated_noise_level)
+                        pred_imgs = self.second_stage(blur_img_normalized,
+                                                      sharp_imgs,
+                                                      estimated_noise_level)
                 else:
                     raise ValueError
             else:
                 if self.residual:
-                    pred_imgs = pred_imgs + self.second_stage(blur_img, pred_imgs, estimated_noise_level)
+                    pred_imgs = pred_imgs + self.second_stage(
+                        blur_img_normalized, pred_imgs, estimated_noise_level)
                 else:
-                    pred_imgs = self.second_stage(blur_img, pred_imgs, estimated_noise_level)
+                    pred_imgs = self.second_stage(blur_img_normalized,
+                                                  pred_imgs,
+                                                  estimated_noise_level)
             all_pred_imgs.append(pred_imgs)
 
         # Calculate losses
@@ -359,12 +525,12 @@ class MBD:
                 x_vgg = self.vgg(pred_imgs.reshape(b * num_gts, c, h, w))
                 y_vgg = self.vgg(sharp_imgs.reshape(b * num_gts, c, h, w))
                 for i in range(len(x_vgg)):
-                    loss += self.perc_ratio * torch.abs(x_vgg[i] - y_vgg[i].detach()).mean()
+                    loss += self.perc_ratio * torch.abs(
+                        x_vgg[i] - y_vgg[i].detach()).mean()
 
-        # NEW: Add noise estimation loss
+        # NEW: Add noise estimation loss with current weight
         if self.use_noise_aware and gt_noise_level is not None:
-            loss += self.noise_loss_weight * noise_estimation_loss
-            out_tensor['noise_est_loss'] = noise_estimation_loss.detach()
+            loss += self.noise_loss_weight * noise_est_loss
 
         # Backward propagation
         if training:
@@ -374,10 +540,12 @@ class MBD:
 
         # Register tensors
         out_tensor['loss'] = loss
-        out_tensor['inp_img'] = self.val_range * blur_img[:, :c].detach()
+        out_tensor['inp_img'] = self.val_range * blur_img_normalized[:,
+                                                 :c].detach()
         out_tensor['trend_img'] = trend_img.detach()
-        out_tensor['pred_imgs'] = torch.clamp(self.val_range * all_pred_imgs[-1].detach(), min=0,
-                                              max=self.val_range)
+        out_tensor['pred_imgs'] = torch.clamp(
+            self.val_range * all_pred_imgs[-1].detach(), min=0,
+            max=self.val_range)
         out_tensor['gt_imgs'] = self.val_range * sharp_imgs
 
         return out_tensor
