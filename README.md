@@ -1,84 +1,101 @@
-# Animation-from-Blur
+# Motion Reconstruction from a Single Blurry Noisy Image using Deep Image Deblurring and Sequence Modeling
 
-#### :rocket: **[ECCV2022]** [Animation from Blur: Multi-modal Blur Decomposition with Motion Guidance](https://arxiv.org/abs/2207.10123)
+This repository contains our re-implementation and extension of the Animation from Blur framework with a new noise-aware decomposition module, improved training pipeline, and evaluation framework. Our goal is to reconstruct motion trajectories and generate plausible video sequences from a single motion-blurred and potentially noisy image.
+We introduce:
 
-by [Zhihang Zhong](https://zzh-tech.github.io/), Xiao Sun, Zhirong Wu, Yinqiang Zheng, Stephen Lin, and Imari Sato
+* A Noise-Aware Motion Blur Decomposition (NAMBD) module  
+* A noise estimator network that predicts σ  
+* FiLM-based feature modulation to adaptively condition features on noise level  
+* A Restormer-based pre-denoising option for extreme noise conditions  
+* A temporal consistency loss to improve metrics  
 
-:point_right: [Project website](https://zzh-tech.github.io/Animation-from-Blur/), [Video demo](https://drive.google.com/file/d/1fsKGdBKAgYFBfpRhNfU3jCV_53N1u-5S/view?usp=sharing)
+## Installation
+We recommend using conda.
 
-Please leave a ⭐ if you like this project!
-
-## News
-
-Please check our new work in CVPR 2023, [BiT](https://github.com/zzh-tech/BiT) (Blur Interpolation Transformer), a fast and powerful transformer-based technique for arbitrary factor blur interpolation with state-of-the-art performance.
-
-#### **TL;DR**:
-
-Existing solutions for recovering sharp motion from a single motion-blurred image do not consider the directional
-ambiguity for each region. We explicitly account for such directional ambiguity by introducing a motion guidance
-representation, which allows us to generate multiple plausible solutions.
-
-<img src="docs/imgs/teaser.jpg" width="800px" />
-
-The motion guidance representation is a compact quantization of 2D optical flow with only four discrete motion
-directions. We propose a unified framework for blur decomposition, which supports various interfaces for generating
-motion guidance, including sampling from a prediction network, estimation from neighboring frames, and annotation from
-users.
-
-<img src="docs/imgs/guidance.jpg" width="800px" />
-
-## Preparation
-
-Please download B-AIST++ dataset from this [link](https://drive.google.com/file/d/1QJ7N3Z86C1ogWaOsuF8-Q88aPGCPUrDL/view?usp=sharing) and unzip it under *./dataset/* directory.
-
-Please download checkpoints from this [link](https://drive.google.com/drive/folders/1dMLluRymW4uO8P5vgxIP48VwqPL1HMkz?usp=sharing) and put them under *./checkpoints/* directory.
-
-#### Installation:
-
-```shell
+1. Create the environment
+```
 conda create -n animation-from-blur python=3.8
 conda activate animation-from-blur
-pip install torch==1.11.0+cu113 torchvision==0.12.0+cu113 torchaudio==0.11.0 --extra-index-url https://download.pytorch.org/whl/cu113
-pip install pyyaml tensorboardX scipy easydict scikit-image opencv-python matplotlib albumentations lpips tqdm torchmetrics==0.5.1
+```
+2. Install Python dependencies
+```
+pip install -r requirements.txt
 ```
 
-## Train
-
-Train blur decomposer:
-```shell
-python -m torch.distributed.launch --nproc_per_node=4 train_mbd.py --config ./configs/mbd_2s_residual.yaml --log_dir ./experiments/baistpp_mbd --verbose
+## Dataset Preparation
+This project uses the GoPro dataset: https://seungjunnah.github.io/Datasets/gopro.html <br> 
+Expected directory structure: <br> 
+```
+Gopro/
+  train/
+  test/
+```
+You may place this directory anywhere, but when running scripts, use:
+```
+--data_dir /path/to/Gopro
 ```
 
-[Optional] Train guidance predictor:
-```shell
-python -m torch.distributed.launch --nproc_per_node=2 train_vaegan.py --config ./configs/cvaegan_gumble_celoss_z4.yaml --log_dir ./experiments/baistpp_cvaegan_gumble_celoss_z4 --verbose
+## Pretrained Weights
+Google Drive download link: https://drive.google.com/drive/folders/14tZ5FIxBKZVbwp3dWi1EWjw1SpngAqhE?usp=sharing <br>
+You may store checkpoints anywhere.
+Pass their paths using ```--predictor_resume_dir``` and ```--decomposer_resume_dir```
+
+## Training
+```
+torchrun --nproc_per_node=1 train_mbd.py \
+  --config ./configs/cfg.yaml \
+  --log_dir ./logs \
+  --verbose
 ```
 
 ## Evaluation
+```
+torchrun valid_vaegan.py \
+  --predictor_resume_dir ./checkpoints/predictor_checkpoint/ \
+  --decomposer_resume_dir ./checkpoints/decomposer_checkpoint/ \
+  --data_dir /path/to/Gopro \
+  -ns 1 \
+  --verbose
 
-Multi-modal blur decomposition evaluation with guidance predictor:
-
-```shell
-CUDA_VISIBLE_DEVICES=0 python -m torch.distributed.launch --nproc_per_node=1 valid_vaegan.py --predictor_resume_dir ./checkpoints/baistpp_cvaegan_gumble_celoss_z4/  --decomposer_resume_dir ./checkpoints/baistpp_mbd_2s_residual --data_dir ./dataset/b-aist++ -ns 1 --verbose
+```
+## Temporal Consistency Loss
+This repository also includes an experimental variant of our model that incorporates an additional temporal consistency loss. <br>
+This model was used to generate part of the results discussed in our report. <br>
+Because this implementation modifies the training loop and introduces additional loss terms, it is kept on a separate branch: temporal_consistency_loss
+#### Checkout the branch
+```
+git checkout temporal_consistency_loss
+```
+## Pretrained Weights
+Download our trained temporal-consistency decomposer weights: https://drive.google.com/drive/folders/1zL6TE_PeP3ZRITd2X3d2mzC2QFUes562?usp=sharing <br>
+This folder contains:
+```
+decomposer_s1.pth      # Stage 1 decomposer (temporal consistency variant)
+decomposer_s2.pth      # Stage 2 decomposer (temporal consistency variant)
+```
+You may store these anywhere.<br>
+When evaluating on this branch, pass them using:
+```
+--decomposer_resume_dir /path/to/temporal_consistency_weights
+```
+## Training
+The training interface is identical to the main model, but uses the modified implementation on this branch:
+```
+torchrun --nproc_per_node=1 train_mbd.py \
+  --config ./configs/mbd_2s_residual.yaml \
+  --log_dir ./logs_temporal \
+  --verbose
+```
+## Evaluation
+```
+torchrun --nproc_per_node=1 validate_simple.py \
+  --decomposer_resume_dir ./logs_temporal \
+  --data_dir /path/to/Gopro
 ```
 
-(*P.S., we test ns=1, ns=3, or ns=5 in the paper.*)
-
-Blur decomposition evaluation using neighboring frames:
-
-```shell
-CUDA_VISIBLE_DEVICES=0 python -m torch.distributed.launch --nproc_per_node=1 valid_video.py --resume_dir=./checkpoints/baistpp_mbd_2s_residual/ --data_dir ./dataset/b-aist++ --verbose
+## Citations
+#### Original Animation from Blur paper
 ```
-
-## Limitations
-
-The training process of guidance predictor is unstable due to complicated GAN structure as well as limited data. Besides, the use of synthetic data can lead to limited generalization capabilities. However, the core of our work is to provide an unprecedented solution to explicitly address the directional ambiguity in the blur decomposition task. We hope that the decoupling of directional uncertainty from blur into a motion guidance will inspire subsequent research.
-
-## Citation
-
-If you find this repository useful, please consider citing:
-
-```bibtex
 @inproceedings{zhong2022animation,
   title={Animation from blur: Multi-modal blur decomposition with motion guidance},
   author={Zhong, Zhihang and Sun, Xiao and Wu, Zhirong and Zheng, Yinqiang and Lin, Stephen and Sato, Imari},
@@ -95,16 +112,3 @@ If you find this repository useful, please consider citing:
   year={2023}
 }
 ```
-
-## Acknowledgement
-
-We thank the nice works mentioned below:
-
-- The guidance predictor network is based on the VAE-GAN of [BiCycleGAN](https://github.com/junyanz/BicycleGAN).
-- The dataset images are partially from [AIST++](https://google.github.io/aistplusplus_dataset/factsfigures.html)
-  , [GOPRO](https://seungjunnah.github.io/Datasets/gopro.html)
-  , [DVD](https://www.cs.ubc.ca/labs/imager/tr/2017/DeepVideoDeblurring/)
-  and [Dual-Reversed-RS](https://github.com/zzh-tech/Dual-Reversed-RS).
-- We use [MMPose](https://github.com/open-mmlab/mmpose) and [RAFT](https://github.com/princeton-vl/RAFT) to preprocess
-  the data.
-- We use [lableme](https://github.com/wkentaro/labelme) to generate user guidance.
