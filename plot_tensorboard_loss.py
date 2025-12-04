@@ -5,7 +5,6 @@ import numpy as np
 import glob
 import os
 
-# Find the largest event file (most recent/complete training run)
 event_files = glob.glob('/w/20251/mahikav/experiments/gopro_mbd_mahika/events.out.tfevents.*')
 largest_file = max(event_files, key=lambda x: os.path.getsize(x))
 print(f"Reading from: {largest_file}")
