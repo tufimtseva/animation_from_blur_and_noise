@@ -106,7 +106,7 @@ def validation_restormer(local_rank, d_configs, p_configs, num_sampling, logger)
 
     print("=" * 60 + "\n")
 
-    noise_levels = [0, 5, 10, 20, 30, 40, 50]
+    noise_levels = [5, 20, 30, 40, 50]
     for noise_level in noise_levels:
         print(f"[INFO] Testing with noise_level={noise_level}")
 
