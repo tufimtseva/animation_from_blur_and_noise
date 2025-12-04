@@ -3,12 +3,11 @@
 This repository contains our re-implementation and extension of the Animation from Blur framework with a new noise-aware decomposition module, improved training pipeline, and evaluation framework. Our goal is to reconstruct motion trajectories and generate plausible video sequences from a single motion-blurred and potentially noisy image.
 We introduce:
 
-*A Noise-Aware Motion Blur Decomposition (NAMBD) module
-*A noise estimator network that predicts σ
-*FiLM-based feature modulation to adaptively condition features on noise level
-*A Restormer-based pre-denoising option for extreme noise conditions
-*A temporal consistency loss to improve metrics
-
+* A Noise-Aware Motion Blur Decomposition (NAMBD) module  
+* A noise estimator network that predicts σ  
+* FiLM-based feature modulation to adaptively condition features on noise level  
+* A Restormer-based pre-denoising option for extreme noise conditions  
+* A temporal consistency loss to improve metrics  
 
 ## Installation
 We recommend using conda.
@@ -59,5 +58,3 @@ torchrun valid_vaegan.py \
   --verbose
 
 ```
-  the data.
-- We use [lableme](https://github.com/wkentaro/labelme) to generate user guidance.
