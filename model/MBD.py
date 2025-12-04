@@ -505,7 +505,7 @@ class MBD:
                 else:
                     raise ValueError
             else:
-                # estimated_noise_level = 50 # todo remove
+                estimated_noise_level = torch.full_like(estimated_noise_level, 10.0) # todo remove
                 if self.residual:
                     pred_imgs = pred_imgs + self.second_stage(
                         blur_img_normalized, pred_imgs, estimated_noise_level)
