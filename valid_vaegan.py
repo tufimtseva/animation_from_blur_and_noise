@@ -46,7 +46,6 @@ def validation(local_rank, d_configs, p_configs, num_sampling, logger):
         dataset_args_override['noise_level'] = noise_level
 
         # Re-initialize dataset with specific noise level
-        # Note: BDDataset must be defined in global scope or imported
         valid_dataset = BDDataset(set_type='valid', **dataset_args_override)
         valid_loader = DataLoader(valid_dataset,
                                   batch_size=1,
@@ -145,7 +144,6 @@ def evaluate(d_model, p_model, valid_loader, local_rank, num_sampling, logger, s
 
 
 if __name__ == '__main__':
-    global BDDataset
     # load args & configs
     parser = ArgumentParser(description='Guidance prediction & Blur Decomposition')
     parser.add_argument('--local_rank', default=0, type=int, help='local rank')
@@ -177,7 +175,6 @@ if __name__ == '__main__':
     p_configs['bicyclegan_args']['no_encode'] = False
 
     # Import blur decomposition dataset
-    # We assign this to the global variable so the validation function can see it
     is_gen_blur = True
     for root_dir in d_configs['dataset_args']['root_dir']:
         if 'b-aist++' in root_dir:
@@ -207,7 +204,7 @@ if __name__ == '__main__':
     logger = Logger(file_path=join(args.log_dir, '{}.txt'.format(args.log_name)), verbose=args.verbose)
 
     # Training model
-    # Passed logger and num_sampling explicitly to match the loop logic
+    # Passed logger and num_sampling explicitly
     validation(local_rank=args.local_rank, d_configs=d_configs, p_configs=p_configs, num_sampling=num_sampling,
                logger=logger)
 
