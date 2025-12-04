@@ -15,8 +15,13 @@ from os.path import join
 from logger import Logger
 from model.bicyclegan.global_model import GuidePredictor as GP
 from tqdm import tqdm
+from restormer_arch import Restormer
+import os
 
 loss_fn_alex = lpips.LPIPS(net='alex').to('cuda:0')
+
+SAVE_DIR = "saved_output"
+os.makedirs(SAVE_DIR, exist_ok=True)
 
 
 def init_seeds(seed=0):
@@ -43,6 +48,70 @@ def validation(local_rank, d_configs, p_configs):
                               pin_memory=True)
     evaluate(d_model, p_model, valid_loader, local_rank)
 
+def validation_restormer(local_rank, d_configs, p_configs, num_sampling, logger):
+    torch.backends.cudnn.benchmark = True
+
+    d_model = MBD(local_rank=local_rank, configs=d_configs)
+    p_model = GP(local_rank=local_rank, configs=p_configs)
+
+    dataset_args = d_configs['dataset_args']
+
+
+    print("\n" + "=" * 60)
+    print("Loading Restormer Denoiser...")
+    print("=" * 60)
+
+    try:
+        denoiser = Restormer(
+            inp_channels=3,
+            out_channels=3,
+            dim=48,
+            num_blocks=[4, 6, 6, 8],
+            num_refinement_blocks=4,
+            heads=[1, 2, 4, 8],
+            ffn_expansion_factor=2.66,
+            bias=False,
+            LayerNorm_type='WithBias',
+            dual_pixel_task=False
+        )
+
+        checkpoint_path = 'pretrained_models/gaussian_color_denoising_sigma25.pth'
+        checkpoint = torch.load(checkpoint_path,
+                                map_location=f'cuda:{local_rank}')
+        denoiser.load_state_dict(checkpoint['params'], strict=False)
+        denoiser = denoiser.cuda(local_rank).eval()
+
+        print(f"✅ Restormer loaded successfully!")
+        print(f"   Model path: {checkpoint_path}")
+        print(f"   Device: cuda:{local_rank}")
+
+    except FileNotFoundError:
+        print(
+            "❌ Restormer weights not found at pretrained_models/gaussian_color_denoising_sigma25.pth")
+        exit(1)
+    except Exception as e:
+        print(f"❌ Failed to load Restormer: {e}")
+        exit(1)
+
+    print("=" * 60 + "\n")
+
+    noise_levels = [0, 5, 10, 20, 30, 40, 50]
+    for noise_level in noise_levels:
+        print(f"[INFO] Testing with noise_level={noise_level}")
+
+        dataset_args_override = dataset_args.copy()
+        dataset_args_override['noisy'] = (noise_level > 0)
+        dataset_args_override['noise_level'] = noise_level
+
+        valid_dataset = BDDataset(set_type='valid', **dataset_args_override)
+        valid_loader = DataLoader(valid_dataset,
+                                  batch_size=1,
+                                  num_workers=d_configs['num_workers'],
+                                  pin_memory=True)
+
+        evaluate_restormer(d_model, p_model, valid_loader, local_rank, num_sampling, logger, valid_dataset.sigma, denoiser)
+
+    logger.close()
 
 @torch.no_grad()
 def evaluate(d_model, p_model, valid_loader, local_rank):
@@ -129,6 +198,133 @@ def evaluate(d_model, p_model, valid_loader, local_rank):
     logger(msg, prefix='[valid max.]')
     logger.close()
 
+@torch.no_grad()
+def evaluate_restormer(d_model, p_model, valid_loader, local_rank, num_sampling, logger, sigma, denoiser):
+    torch.cuda.empty_cache()
+    device = torch.device("cuda", local_rank)
+    psnr_meter = AverageMeter()
+    ssim_meter = AverageMeter()
+    lpips_meter = AverageMeter()
+    psnr_meter_better = AverageMeter()
+    ssim_meter_better = AverageMeter()
+    lpips_meter_better = AverageMeter()
+    time_stamp = time.time()
+
+    NUM_SEQUENCES_TO_SAVE = 5
+
+    noise_dir = join(SAVE_DIR, f"noise_sigma_{sigma}")
+    os.makedirs(noise_dir, exist_ok=True)
+
+    for i, tensor in enumerate(tqdm(valid_loader, total=len(valid_loader))):
+        tensor['inp'] = tensor['inp'].to(device)
+        tensor['trend'] = torch.zeros_like(tensor['inp'])[:, :, :2]
+
+
+        torch.cuda.empty_cache()
+        blurry_input = tensor['inp'].squeeze(1)
+        # Check data range and normalize if needed
+        if blurry_input.max() > 1.0:
+
+            blurry_input_normalized = blurry_input.to(device) / 255.0
+            needs_denorm = True
+        else:
+            blurry_input_normalized = blurry_input.to(device)
+            needs_denorm = False
+
+
+        denoised_blur = denoiser(blurry_input_normalized)
+
+        if needs_denorm:
+            denoised_blur = denoised_blur * 255.0
+
+        tensor['inp'] = denoised_blur.unsqueeze(1)
+
+        tensor['gt'] = tensor['gt'].to(device)
+        b, num_gts, c, h, w = tensor['gt'].shape
+
+        if i < NUM_SEQUENCES_TO_SAVE:
+            seq_dir = join(noise_dir, f"sequence_{i}")
+            os.makedirs(seq_dir, exist_ok=True)
+
+            input_img = tensor['inp'][0, 0].cpu()
+            input_save_path = join(seq_dir, "00_input_blurry.png")
+            vutils.save_image(input_img / 255.0, input_save_path)
+
+        psnr_vals = []
+        ssim_vals = []
+        lpips_vals = []
+        psnr_vals_better = []
+        ssim_vals_better = []
+        lpips_vals_better = []
+
+        for _ in range(num_sampling):
+            p_tensor = {}
+            p_tensor['inp'] = F.interpolate(tensor['inp'], size=(3, 256, 256))
+            p_tensor['trend'] = F.interpolate(tensor['trend'], size=(2, 256, 256))
+            p_tensor['video'] = ''
+            out_tensor = p_model.test(inp_tensor=p_tensor, zeros=False)
+            tensor['trend'] = out_tensor['pred_trends'].to(device)
+            tensor['trend'] = F.interpolate(tensor['trend'], size=(h, w))[None]
+            out_tensor = d_model.update(inp_tensor=tensor, training=False)
+            pred_imgs = out_tensor['pred_imgs']
+            gt_imgs = out_tensor['gt_imgs']
+
+            pred_imgs_for_save = pred_imgs[0]
+            gt_imgs_for_save = gt_imgs[0]
+
+            if i < NUM_SEQUENCES_TO_SAVE:
+                for frame_idx in range(num_gts):
+                    pred_frame = pred_imgs_for_save[frame_idx].cpu() / 255.0
+                    pred_path = join(seq_dir, f"frame{frame_idx}_predicted.png")
+                    vutils.save_image(pred_frame, pred_path)
+
+                    gt_frame = gt_imgs_for_save[frame_idx].cpu() / 255.0
+                    gt_path = join(seq_dir, f"frame{frame_idx}_groundtruth.png")
+                    vutils.save_image(gt_frame, gt_path)
+
+            pred_imgs = pred_imgs.reshape(num_gts * b, c, h, w)
+            pred_imgs = pred_imgs.to(device)
+            gt_imgs = gt_imgs.to(device)
+            pred_imgs_rev = torch.flip(pred_imgs, dims=[1, ])
+            pred_imgs = pred_imgs.reshape(num_gts * b, c, h, w)
+            pred_imgs_rev = pred_imgs_rev.reshape(num_gts * b, c, h, w)
+            gt_imgs = gt_imgs.reshape(num_gts * b, c, h, w)
+            psnr_val = torchmetrics.functional.psnr(pred_imgs, gt_imgs, data_range=255)
+            psnr_val_rev = torchmetrics.functional.psnr(pred_imgs_rev, gt_imgs, data_range=255)
+            ssim_val = torchmetrics.functional.ssim(pred_imgs, gt_imgs, data_range=255)
+            ssim_val_rev = torchmetrics.functional.ssim(pred_imgs_rev, gt_imgs, data_range=255)
+            pred_imgs = (pred_imgs - (255. / 2)) / (255. / 2)
+            pred_imgs_rev = (pred_imgs_rev - (255. / 2)) / (255. / 2)
+            gt_imgs = (gt_imgs - (255. / 2)) / (255. / 2)
+            lpips_val = loss_fn_alex(pred_imgs, gt_imgs)
+            lpips_val_rev = loss_fn_alex(pred_imgs_rev, gt_imgs)
+
+            psnr_vals.append(psnr_val)
+            psnr_vals_better.append(max(psnr_val, psnr_val_rev))
+            ssim_vals.append(ssim_val)
+            ssim_vals_better.append(max(ssim_val, ssim_val_rev))
+            lpips_vals.append(lpips_val.mean().detach())
+            lpips_vals_better.append(min(lpips_val.mean().detach(), lpips_val_rev.mean().detach()))
+
+        psnr_meter.update(max(psnr_vals), num_gts * b)
+        ssim_meter.update(max(ssim_vals), num_gts * b)
+        lpips_meter.update(min(lpips_vals), num_gts * b)
+        psnr_meter_better.update(max(psnr_vals_better), num_gts * b)
+        ssim_meter_better.update(max(ssim_vals_better), num_gts * b)
+        lpips_meter_better.update(min(lpips_vals_better), num_gts * b)
+
+    eval_time_interval = time.time() - time_stamp
+    msg = 'eval time: {} sec, psnr: {:.5f}, ssim: {:.5f}, lpips: {:.4f}'.format(
+        eval_time_interval, psnr_meter.avg, ssim_meter.avg, lpips_meter.avg
+    )
+    logger(msg, prefix=f'[valid σ={sigma}]')
+    msg = 'eval time: {:.4f} sec, psnr: {:.4f}, ssim: {:.4f}, lpips: {:.4f}'.format(
+        eval_time_interval, psnr_meter_better.avg, ssim_meter_better.avg, lpips_meter_better.avg
+    )
+    logger(msg, prefix=f'[valid max. σ={sigma}]')
+
+    print(f"[INFO] Saved images for σ={sigma} in {noise_dir}")
+
 
 if __name__ == '__main__':
     # load args & configs
@@ -142,6 +338,8 @@ if __name__ == '__main__':
     parser.add_argument('--num_iters', type=int, default=1, help='number of iters')
     parser.add_argument('-ns', '--num_sampling', type=int, default=1, help='number of sampling times')
     parser.add_argument('--verbose', action='store_true', help='whether to print out logs')
+    parser.add_argument('--restormer', action='store_true',
+                        help='whether to apply denoiser first')
     args = parser.parse_args()
     num_sampling = args.num_sampling
 
@@ -188,8 +386,13 @@ if __name__ == '__main__':
     # Logger init
     logger = Logger(file_path=join(args.log_dir, '{}.txt'.format(args.log_name)), verbose=args.verbose)
 
-    # Training model
-    validation(local_rank=args.local_rank, d_configs=d_configs, p_configs=p_configs)
+    if args.restormer:
+        validation_restormer(local_rank=args.local_rank, d_configs=d_configs, p_configs=p_configs, num_sampling=num_sampling,
+               logger=logger)
+    else:
+        validation(local_rank=args.local_rank, d_configs=d_configs,
+                             p_configs=p_configs, num_sampling=num_sampling,
+                             logger=logger)
 
     # Tear down the process group
     dist.destroy_process_group()
