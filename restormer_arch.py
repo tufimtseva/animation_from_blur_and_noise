@@ -2,7 +2,6 @@
 ## Syed Waqas Zamir, Aditya Arora, Salman Khan, Munawar Hayat, Fahad Shahbaz Khan, and Ming-Hsuan Yang
 ## https://arxiv.org/abs/2111.09881
 
-
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
@@ -10,8 +9,6 @@ from pdb import set_trace as stx
 import numbers
 
 from einops import rearrange
-
-
 
 ##########################################################################
 ## Layer Norm
@@ -70,7 +67,6 @@ class LayerNorm(nn.Module):
         return to_4d(self.body(to_3d(x)), h, w)
 
 
-
 ##########################################################################
 ## Gated-Dconv Feed-Forward Network (GDFN)
 class FeedForward(nn.Module):
@@ -91,8 +87,6 @@ class FeedForward(nn.Module):
         x = F.gelu(x1) * x2
         x = self.project_out(x)
         return x
-
-
 
 ##########################################################################
 ## Multi-DConv Head Transposed Self-Attention (MDTA)
