@@ -101,7 +101,7 @@ def validation(local_rank, d_configs, p_configs, num_sampling, logger):
     # dataset init
     dataset_args = d_configs['dataset_args']
     # noises = [5, 10, 20, 30, 40, 50]
-    noises = [50]
+    noises = [10]
 
     for noise_level in noises:
         print(f"[INFO] Testing with noise_level={noise_level}")
@@ -196,43 +196,8 @@ def evaluate(d_model, p_model, valid_loader, device, num_sampling, logger, sigma
             # Restore the expected shape: (b, 3, h, w) -> (b, 1, 3, h, w)
             tensor['inp'] = denoised_blur.unsqueeze(1)
 
-
-
-        # if i == 0:
-        #     print(
-        #         f"\n[Denoising] Input range: [{blurry_input.min():.2f}, {blurry_input.max():.2f}]")
-        #     print(
-        #         f"[Denoising] Output range: [{denoised_blur.min():.2f}, {denoised_blur.max():.2f}]")
-        #     print(f"[Denoising] Normalized for denoiser: {needs_denorm}\n")
-
-
-
         tensor['gt'] = tensor['gt'].to(device)
         b, num_gts, c, h, w = tensor['gt'].shape
-
-        # # NEW: Actually ADD noise to the input images if sigma > 0
-        # if sigma > 0:
-        #     # Get the blurry input (b, 1, 3, h, w)
-        #     noisy_inp = tensor['inp'].clone()
-        #     # Normalize to [0, 1]
-        #     noisy_inp = noisy_inp / 255.0
-        #     # Add Gaussian noise with the specified sigma
-        #     noise = torch.randn_like(noisy_inp) * (sigma / 255.0)
-        #     noisy_inp = noisy_inp + noise
-        #     # Clamp and scale back to [0, 255]
-        #     noisy_inp = torch.clamp(noisy_inp, 0, 1) * 255.0
-        #     tensor['inp'] = noisy_inp
-        #
-        # # Set the ground truth noise level
-        # tensor['noise_level'] = torch.full((b, 1), float(sigma), device=device)
-        #
-        # if i < NUM_SEQUENCES_TO_SAVE:
-        #     seq_dir = join(noise_dir, f"sequence_{i}")
-        #     os.makedirs(seq_dir, exist_ok=True)
-        #
-        #     input_img = tensor['inp'][0, 0].cpu()
-        #     input_save_path = join(seq_dir, "00_input_blurry.png")
-        #     vutils.save_image(input_img / 255.0, input_save_path)
 
         psnr_vals = []
         ssim_vals = []
