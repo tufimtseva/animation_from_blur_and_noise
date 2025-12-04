@@ -5,10 +5,8 @@ import numpy as np
 import albumentations as A
 
 try:
-    # from trend import trend_rot90, trend_lr_flip, trend_ud_flip, trend_diagonal_reverse
     from flow import flow_rot90, flow_lr_flip, flow_ud_flip, flow_diagonal_reverse
 except:
-    # from data.trend import trend_rot90, trend_lr_flip, trend_ud_flip, trend_diagonal_reverse
     from data.flow import flow_rot90, flow_lr_flip, flow_ud_flip, flow_diagonal_reverse
 
 
@@ -16,7 +14,6 @@ class Compose:
     """
     Compose a series of image augmentations
     """
-
     def __init__(self, transforms):
         # assert isinstance(transforms, list) and len(transforms) > 0
         self.tranforms = transforms
@@ -79,7 +76,6 @@ class NearBBoxResizedSafeCrop:
             image[:, :, 1] *= self.height / float(y_max - y_min)
 
         # args: arguments for replaying this augmentation
-        # todo: re-calculate the bbox
         return {'image': image, 'bbox': None}, args
 
 
