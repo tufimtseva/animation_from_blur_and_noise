@@ -26,6 +26,6 @@ torchrun  valid_vaegan.py \
   --predictor_resume_dir ./checkpoints/baistpp_cvaegan_gumble_celoss_z4/ \
   --decomposer_resume_dir /w/20251/tufimtseva/weights \
   --data_dir /w/20251/tufimtseva/Gopro \
-  -- restormer
+  --restormer
   -ns 1 \
   --verbose
