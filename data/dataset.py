@@ -211,15 +211,12 @@ class BAistPP(Dataset):
         inp_fmt = '{:06d}.' + suffix
         gt_fmt = '{:06d}.' + suffix
 
-        print(f"[DEBUG] gen_samples_gopro called with root_dir={root_dir}")
-        print(f"[DEBUG] video_dirs={video_dirs}")
 
         for vid_dir in video_dirs:
             inp_dir_path = join(root_dir, vid_dir, 'blur')
             gt_dir_path = join(root_dir, vid_dir, 'sharp')
 
-            print(
-                f"[DEBUG] Checking {vid_dir}: inp={inp_dir_path}, exists={os.path.exists(inp_dir_path)}")
+
 
             if not os.path.exists(inp_dir_path) or not os.path.exists(
                     gt_dir_path):
@@ -232,8 +229,7 @@ class BAistPP(Dataset):
                 sharp_imgs = sorted([item for item in os.listdir(gt_dir_path) if
                                      item.endswith(suffix)])
 
-                print(
-                    f"[DEBUG] Found {len(blur_imgs)} blur, {len(sharp_imgs)} sharp")
+
 
                 blur_indices = sorted(
                     [int(img.split('.')[0]) for img in blur_imgs])
@@ -244,11 +240,7 @@ class BAistPP(Dataset):
                 continue
 
             valid_indices = sorted(set(blur_indices) & set(sharp_indices))
-            print(f"[DEBUG] Valid indices: {len(valid_indices)}")
 
-            # if len(valid_indices) < 3:
-            #     print(f"[DEBUG] SKIP - not enough frames")
-            #     continue
 
             count = 0
             for i in range(1, len(valid_indices) - 1):
@@ -272,9 +264,6 @@ class BAistPP(Dataset):
                     samples.append(sample)
                     count += 1
 
-            print(f"[DEBUG] Added {count} samples from {vid_dir}")
-
-        print(f"[DEBUG] TOTAL samples: {len(samples)}")
         return samples
 
     # def gen_samples(self, root_dir, video_list, suffix, num_gts, num_fut, num_past):
