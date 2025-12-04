@@ -210,19 +210,24 @@ class BAistPP(Dataset):
         """
         Replay the same augmentation to each images in the tensor
         """
-        img, bbox = tensor['inp'][-1], tensor['inp_bbox'][-1]
-        out = transform(image=img, bbox=bbox)
-        tensor['inp'][-1], replay_args = out['image'], out['replay_args']
-        for i, img in enumerate(tensor['inp'][:-1]):
-            tensor['inp'][i] = transform(image=img, bbox=bbox, replay_args=replay_args)['image']
-        for i, img in enumerate(tensor['gt']):
-            tensor['gt'][i] = transform(image=img, bbox=bbox, replay_args=replay_args)['image']
-        if self.use_trend:
-            for i, trend in enumerate(tensor['trend']):
-                tensor['trend'][i] = transform(image=trend, bbox=bbox, replay_args=replay_args, trend=True)['image']
-        if self.use_flow:
-            for i, flow in enumerate(tensor['flow']):
-                tensor['flow'][i] = transform(image=flow, bbox=bbox, replay_args=replay_args, flow=True)['image']
+        # img, bbox = tensor['inp'][-1], tensor['inp_bbox'][-1]
+
+        # img = tensor['inp'][-1]
+        # bbox = None  # GoPro has no bboxes, just set to None
+        #
+        # # out = transform(image=img, bbox=bbox)
+        # out = img
+        # tensor['inp'][-1], replay_args = out['image'], out['replay_args']
+        # for i, img in enumerate(tensor['inp'][:-1]):
+        #     tensor['inp'][i] = transform(image=img, bbox=bbox, replay_args=replay_args)['image']
+        # for i, img in enumerate(tensor['gt']):
+        #     tensor['gt'][i] = transform(image=img, bbox=bbox, replay_args=replay_args)['image']
+        # if self.use_trend:
+        #     for i, trend in enumerate(tensor['trend']):
+        #         tensor['trend'][i] = transform(image=trend, bbox=bbox, replay_args=replay_args, trend=True)['image']
+        # if self.use_flow:
+        #     for i, flow in enumerate(tensor['flow']):
+        #         tensor['flow'][i] = transform(image=flow, bbox=bbox, replay_args=replay_args, flow=True)['image']
         return tensor
 
     def replay_video_aug(self, tensor, transform):
