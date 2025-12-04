@@ -23,7 +23,7 @@ class NoiseEstimationBranch(nn.Module):
             nn.Linear(16, 8),
             nn.ReLU(),
             nn.Linear(8, 1),
-            nn.Sigmoid()  # Output: noise level ∈ [0, 1]
+            nn.Sigmoid()
         )
 
     def forward(self, x):
