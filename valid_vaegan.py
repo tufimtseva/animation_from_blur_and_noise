@@ -101,7 +101,7 @@ def validation(local_rank, d_configs, p_configs, num_sampling, logger):
     # dataset init
     dataset_args = d_configs['dataset_args']
     # noises = [5, 10, 20, 30, 40, 50]
-    noises = [10]
+    noises = [50]
 
     for noise_level in noises:
         print(f"[INFO] Testing with noise_level={noise_level}")
