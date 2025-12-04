@@ -258,15 +258,13 @@ def evaluate_restormer(d_model, p_model, valid_loader, local_rank, num_sampling,
         blurry_input = tensor['inp'].squeeze(1)
         # Check data range and normalize if needed
         if blurry_input.max() > 1.0:
-            print("Normalizing to 0 - 1")
+
             blurry_input_normalized = blurry_input.to(device) / 255.0
             needs_denorm = True
         else:
             blurry_input_normalized = blurry_input.to(device)
             needs_denorm = False
 
-        print("Input range to noise estimator:", blurry_input_normalized.min(),
-              blurry_input_normalized.max())
 
         denoised_blur = denoiser(blurry_input_normalized)
 
