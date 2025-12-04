@@ -106,7 +106,7 @@ def validation_restormer(local_rank, d_configs, p_configs, num_sampling, logger)
 
     print("=" * 60 + "\n")
 
-    noise_levels = [0, 10]
+    noise_levels = [0, 5, 10, 20, 30, 40, 50]
     for noise_level in noise_levels:
         print(f"[INFO] Testing with noise_level={noise_level}")
 
@@ -120,7 +120,7 @@ def validation_restormer(local_rank, d_configs, p_configs, num_sampling, logger)
                                   num_workers=d_configs['num_workers'],
                                   pin_memory=True)
 
-        evaluate(d_model, p_model, valid_loader, local_rank, num_sampling, logger, valid_dataset.sigma)
+        evaluate_restormer(d_model, p_model, valid_loader, local_rank, num_sampling, logger, valid_dataset.sigma, denoiser)
 
     logger.close()
 
@@ -231,6 +231,135 @@ def evaluate(d_model, p_model, valid_loader, local_rank, num_sampling, logger, s
 
     print(f"[INFO] Saved images for σ={sigma} in {noise_dir}")
 
+
+@torch.no_grad()
+def evaluate_restormer(d_model, p_model, valid_loader, local_rank, num_sampling, logger, sigma, denoiser):
+    torch.cuda.empty_cache()
+    device = torch.device("cuda", local_rank)
+    psnr_meter = AverageMeter()
+    ssim_meter = AverageMeter()
+    lpips_meter = AverageMeter()
+    psnr_meter_better = AverageMeter()
+    ssim_meter_better = AverageMeter()
+    lpips_meter_better = AverageMeter()
+    time_stamp = time.time()
+
+    NUM_SEQUENCES_TO_SAVE = 5
+
+    noise_dir = join(SAVE_DIR, f"noise_sigma_{sigma}")
+    os.makedirs(noise_dir, exist_ok=True)
+
+    for i, tensor in enumerate(tqdm(valid_loader, total=len(valid_loader))):
+        tensor['inp'] = tensor['inp'].to(device)
+        tensor['trend'] = torch.zeros_like(tensor['inp'])[:, :, :2]
+
+
+        torch.cuda.empty_cache()
+        blurry_input = tensor['inp'].squeeze(1)
+        # Check data range and normalize if needed
+        if blurry_input.max() > 1.0:
+            print("Normalizing to 0 - 1")
+            blurry_input_normalized = blurry_input.to(device) / 255.0
+            needs_denorm = True
+        else:
+            blurry_input_normalized = blurry_input.to(device)
+            needs_denorm = False
+
+        print("Input range to noise estimator:", blurry_input_normalized.min(),
+              blurry_input_normalized.max())
+
+        denoised_blur = denoiser(blurry_input_normalized)
+
+        if needs_denorm:
+            denoised_blur = denoised_blur * 255.0
+
+        tensor['inp'] = denoised_blur.unsqueeze(1)
+
+        tensor['gt'] = tensor['gt'].to(device)
+        b, num_gts, c, h, w = tensor['gt'].shape
+
+        if i < NUM_SEQUENCES_TO_SAVE:
+            seq_dir = join(noise_dir, f"sequence_{i}")
+            os.makedirs(seq_dir, exist_ok=True)
+
+            input_img = tensor['inp'][0, 0].cpu()
+            input_save_path = join(seq_dir, "00_input_blurry.png")
+            vutils.save_image(input_img / 255.0, input_save_path)
+
+        psnr_vals = []
+        ssim_vals = []
+        lpips_vals = []
+        psnr_vals_better = []
+        ssim_vals_better = []
+        lpips_vals_better = []
+
+        for _ in range(num_sampling):
+            p_tensor = {}
+            p_tensor['inp'] = F.interpolate(tensor['inp'], size=(3, 256, 256))
+            p_tensor['trend'] = F.interpolate(tensor['trend'], size=(2, 256, 256))
+            p_tensor['video'] = ''
+            out_tensor = p_model.test(inp_tensor=p_tensor, zeros=False)
+            tensor['trend'] = out_tensor['pred_trends'].to(device)
+            tensor['trend'] = F.interpolate(tensor['trend'], size=(h, w))[None]
+            out_tensor = d_model.update(inp_tensor=tensor, training=False)
+            pred_imgs = out_tensor['pred_imgs']
+            gt_imgs = out_tensor['gt_imgs']
+
+            pred_imgs_for_save = pred_imgs[0]
+            gt_imgs_for_save = gt_imgs[0]
+
+            if i < NUM_SEQUENCES_TO_SAVE:
+                for frame_idx in range(num_gts):
+                    pred_frame = pred_imgs_for_save[frame_idx].cpu() / 255.0
+                    pred_path = join(seq_dir, f"frame{frame_idx}_predicted.png")
+                    vutils.save_image(pred_frame, pred_path)
+
+                    gt_frame = gt_imgs_for_save[frame_idx].cpu() / 255.0
+                    gt_path = join(seq_dir, f"frame{frame_idx}_groundtruth.png")
+                    vutils.save_image(gt_frame, gt_path)
+
+            pred_imgs = pred_imgs.reshape(num_gts * b, c, h, w)
+            pred_imgs = pred_imgs.to(device)
+            gt_imgs = gt_imgs.to(device)
+            pred_imgs_rev = torch.flip(pred_imgs, dims=[1, ])
+            pred_imgs = pred_imgs.reshape(num_gts * b, c, h, w)
+            pred_imgs_rev = pred_imgs_rev.reshape(num_gts * b, c, h, w)
+            gt_imgs = gt_imgs.reshape(num_gts * b, c, h, w)
+            psnr_val = torchmetrics.functional.psnr(pred_imgs, gt_imgs, data_range=255)
+            psnr_val_rev = torchmetrics.functional.psnr(pred_imgs_rev, gt_imgs, data_range=255)
+            ssim_val = torchmetrics.functional.ssim(pred_imgs, gt_imgs, data_range=255)
+            ssim_val_rev = torchmetrics.functional.ssim(pred_imgs_rev, gt_imgs, data_range=255)
+            pred_imgs = (pred_imgs - (255. / 2)) / (255. / 2)
+            pred_imgs_rev = (pred_imgs_rev - (255. / 2)) / (255. / 2)
+            gt_imgs = (gt_imgs - (255. / 2)) / (255. / 2)
+            lpips_val = loss_fn_alex(pred_imgs, gt_imgs)
+            lpips_val_rev = loss_fn_alex(pred_imgs_rev, gt_imgs)
+
+            psnr_vals.append(psnr_val)
+            psnr_vals_better.append(max(psnr_val, psnr_val_rev))
+            ssim_vals.append(ssim_val)
+            ssim_vals_better.append(max(ssim_val, ssim_val_rev))
+            lpips_vals.append(lpips_val.mean().detach())
+            lpips_vals_better.append(min(lpips_val.mean().detach(), lpips_val_rev.mean().detach()))
+
+        psnr_meter.update(max(psnr_vals), num_gts * b)
+        ssim_meter.update(max(ssim_vals), num_gts * b)
+        lpips_meter.update(min(lpips_vals), num_gts * b)
+        psnr_meter_better.update(max(psnr_vals_better), num_gts * b)
+        ssim_meter_better.update(max(ssim_vals_better), num_gts * b)
+        lpips_meter_better.update(min(lpips_vals_better), num_gts * b)
+
+    eval_time_interval = time.time() - time_stamp
+    msg = 'eval time: {} sec, psnr: {:.5f}, ssim: {:.5f}, lpips: {:.4f}'.format(
+        eval_time_interval, psnr_meter.avg, ssim_meter.avg, lpips_meter.avg
+    )
+    logger(msg, prefix=f'[valid σ={sigma}]')
+    msg = 'eval time: {:.4f} sec, psnr: {:.4f}, ssim: {:.4f}, lpips: {:.4f}'.format(
+        eval_time_interval, psnr_meter_better.avg, ssim_meter_better.avg, lpips_meter_better.avg
+    )
+    logger(msg, prefix=f'[valid max. σ={sigma}]')
+
+    print(f"[INFO] Saved images for σ={sigma} in {noise_dir}")
 
 @record
 def main():
