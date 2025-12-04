@@ -36,7 +36,7 @@ You may place this directory anywhere, but when running scripts, use:
 ```
 
 ## Pretrained Weights
-Google Drive download link: 
+Google Drive download link: https://drive.google.com/drive/folders/14tZ5FIxBKZVbwp3dWi1EWjw1SpngAqhE?usp=sharing
 You may store checkpoints anywhere.
 Pass their paths using ```--predictor_resume_dir``` and ```--decomposer_resume_dir```
 
@@ -58,6 +58,41 @@ torchrun valid_vaegan.py \
   --verbose
 
 ```
+## Temporal Consistency Loss
+This repository also includes an experimental variant of our model that incorporates an additional temporal consistency loss. <br>
+This model was used to generate part of the results discussed in our report. <br>
+Because this implementation modifies the training loop and introduces additional loss terms, it is kept on a separate branch: temporal_consistency_loss
+#### Checkout the branch
+```
+git checkout temporal_consistency_loss
+```
+## Pretrained Weights
+Download our trained temporal-consistency decomposer weights: https://drive.google.com/drive/folders/1zL6TE_PeP3ZRITd2X3d2mzC2QFUes562?usp=sharing <br>
+This folder contains:
+```
+decomposer_s1.pth      # Stage 1 decomposer (temporal consistency variant)
+decomposer_s2.pth      # Stage 2 decomposer (temporal consistency variant)
+```
+You may store these anywhere.<br>
+When evaluating on this branch, pass them using:
+```
+--decomposer_resume_dir /path/to/temporal_consistency_weights
+```
+## Training
+The training interface is identical to the main model, but uses the modified implementation on this branch:
+```
+torchrun --nproc_per_node=1 train_mbd.py \
+  --config ./configs/mbd_2s_residual.yaml \
+  --log_dir ./logs_temporal \
+  --verbose
+```
+## Evaluation
+```
+torchrun --nproc_per_node=1 validate_simple.py \
+  --decomposer_resume_dir ./logs_temporal \
+  --data_dir /path/to/Gopro
+```
+
 ## Citations
 #### Original Animation from Blur paper
 ```
