@@ -106,7 +106,8 @@ def validation_restormer(local_rank, d_configs, p_configs, num_sampling, logger)
 
     print("=" * 60 + "\n")
 
-    for noise_level in [0, 5, 10, 20]:
+    noise_levels = [0, 10]
+    for noise_level in noise_levels:
         print(f"[INFO] Testing with noise_level={noise_level}")
 
         dataset_args_override = dataset_args.copy()
@@ -239,6 +240,8 @@ def main():
     parser.add_argument('--log_name', default='valid', help='log name')
     parser.add_argument('--predictor_resume_dir', help='path of log', required=True)
     parser.add_argument('--decomposer_resume_dir', help='path of log', required=True)
+    parser.add_argument('--restormer', action='store_true',
+                        help='whether to apply denoiser first')
     parser.add_argument('--data_dir', nargs='+', required=True)
     parser.add_argument('--num_iters', type=int, default=1, help='number of iters')
     parser.add_argument('-ns', '--num_sampling', type=int, default=1, help='number of sampling times')
@@ -277,8 +280,13 @@ def main():
     rank = dist.get_rank()
     init_seeds(seed=rank)
 
-    validation_restormer(local_rank=args.local_rank, d_configs=d_configs, p_configs=p_configs, num_sampling=num_sampling,
+    if args.restormer:
+        validation_restormer(local_rank=args.local_rank, d_configs=d_configs, p_configs=p_configs, num_sampling=num_sampling,
                logger=logger)
+    else:
+        validation(local_rank=args.local_rank, d_configs=d_configs,
+                             p_configs=p_configs, num_sampling=num_sampling,
+                             logger=logger)
     dist.destroy_process_group()
 
 
