@@ -23,8 +23,8 @@ pip install -r requirements.txt
 ```
 
 ## Dataset Preparation
-This project uses the GoPro dataset: https://seungjunnah.github.io/Datasets/gopro.html
-Expected directory structure:
+This project uses the GoPro dataset: https://seungjunnah.github.io/Datasets/gopro.html <br> 
+Expected directory structure: <br> 
 ```
 Gopro/
   train/
@@ -57,4 +57,23 @@ torchrun valid_vaegan.py \
   -ns 1 \
   --verbose
 
+```
+## Citations
+#### Original Animation from Blur paper
+```
+@inproceedings{zhong2022animation,
+  title={Animation from blur: Multi-modal blur decomposition with motion guidance},
+  author={Zhong, Zhihang and Sun, Xiao and Wu, Zhirong and Zheng, Yinqiang and Lin, Stephen and Sato, Imari},
+  booktitle={Computer Vision--ECCV 2022: 17th European Conference, Tel Aviv, Israel, October 23--27, 2022, Proceedings, Part XIX},
+  pages={599--615},
+  year={2022},
+  organization={Springer}
+}
+@inproceedings{zhong2023blur,
+  title={Blur Interpolation Transformer for Real-World Motion from Blur},
+  author={Zhong, Zhihang and Cao, Mingdeng and Ji, Xiang and Zheng, Yinqiang and Sato, Imari},
+  booktitle={Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition},
+  pages={5713--5723},
+  year={2023}
+}
 ```
