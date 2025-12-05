@@ -7,7 +7,7 @@ We introduce:
 * A noise estimator network that predicts σ  
 * FiLM-based feature modulation to adaptively condition features on noise level  
 * A Restormer-based pre-denoising option for extreme noise conditions  
-* A temporal consistency loss to improve metrics  
+* A temporal consistency loss to improve motion reconstruciton quality  
 
 ## Installation
 We recommend using conda.
