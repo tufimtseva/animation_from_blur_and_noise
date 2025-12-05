@@ -45,7 +45,7 @@ test_loader = DataLoader(test_dataset, batch_size=1, shuffle=False)
 output_dir = 'all_generated_sequences'
 os.makedirs(output_dir, exist_ok=True)
 
-# Process ALL test samples
+# Process test samples
 with torch.no_grad():
     for i, tensor in enumerate(test_loader):
         tensor['inp'] = tensor['inp'].cuda()
