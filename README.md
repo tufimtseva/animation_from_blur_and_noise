@@ -49,6 +49,40 @@ torchrun --nproc_per_node=1 train_mbd.py \
 ```
 
 ## Evaluation
+ 
+
+To use the pretrained **Restormer** denoiser, download the official Gaussian color denoising model (`σ = 25`) from the Restormer repository:
+
+**Download link:**  
+https://github.com/swz30/Restormer/releases/download/v1.0/gaussian_color_denoising_sigma25.pth
+
+After downloading the file, place it in the `pretrained_models` folder:
+
+```
+pretrained_models/gaussian_color_denoising_sigma25.pth
+
+```
+
+### Restormer + Animation From Blur:
+
+#### Checkout the branch
+```
+git checkout restormer_animation_from_blur
+```
+
+```
+torchrun valid_vaegan.py \
+  --predictor_resume_dir ./checkpoints/predictor_checkpoint/ \
+  --decomposer_resume_dir ./checkpoints/decomposer_checkpoint/ \
+  --data_dir /path/to/Gopro \
+  -ns 1 \
+  --verbose \
+  --restormer \
+
+```
+
+### Pure NAMBD:
+
 ```
 torchrun valid_vaegan.py \
   --predictor_resume_dir ./checkpoints/predictor_checkpoint/ \
@@ -58,6 +92,25 @@ torchrun valid_vaegan.py \
   --verbose
 
 ```
+
+### Restormer (pre-denoising stage) + NAMBD:
+
+#### Checkout the branch
+```
+git checkout restormer_nambd
+```
+
+```
+torchrun valid_vaegan.py \
+  --predictor_resume_dir ./checkpoints/predictor_checkpoint/ \
+  --decomposer_resume_dir ./checkpoints/decomposer_checkpoint/ \
+  --data_dir /path/to/Gopro \
+  -ns 1 \
+  --verbose \
+  --restormer \
+
+```
+
 ## Temporal Consistency Loss
 This repository also includes an experimental variant of our model that incorporates an additional temporal consistency loss. <br>
 This model was used to generate part of the results discussed in our report. <br>
