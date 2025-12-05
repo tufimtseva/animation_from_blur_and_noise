@@ -51,10 +51,6 @@ class FlowEstimator:
 if __name__ == '__main__':
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     flow_estimator = FlowEstimator(device, checkpoint='../checkpoints/raft-sintel.pth', iters=20)
-    # ref_img = torch.randn(4, 3, 192, 160).to(device)
-    # tgt_imgs = torch.randn(7 * 4, 3, 192, 160).to(device)
-    # flows = flow_estimator.batch_inference(ref_img, tgt_imgs)
-    # print(flows.shape)
 
     import cv2
     import numpy as np
