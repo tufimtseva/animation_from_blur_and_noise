@@ -47,7 +47,6 @@ class BAistPP(Dataset):
         assert isinstance(root_dir, list)
         self.samples = []
 
-        # Define train and test video lists (from your actual GoPro folder)
         train_videos = [
             "GOPR0372_07_00", "GOPR0372_07_01", "GOPR0374_11_00",
             "GOPR0374_11_01", "GOPR0374_11_02", "GOPR0374_11_03",
@@ -66,11 +65,10 @@ class BAistPP(Dataset):
             "GOPR0871_11_00", "GOPR0881_11_01"
         ]
 
-        # Choose split based on set_type
         if set_type == 'train':
             split_folder = 'train'
             selected_videos = train_videos
-        else:  # 'valid' or 'test'
+        else:  
             split_folder = 'test'
             selected_videos = test_videos
 
@@ -82,14 +80,11 @@ class BAistPP(Dataset):
 
             data_root = os.path.join(rdir, split_folder)
 
-            # Auto-detect videos if folder exists
             if os.path.exists(data_root):
                 available_videos = [d for d in os.listdir(data_root)
                                     if os.path.isdir(os.path.join(data_root, d))]
-                # Use intersection of selected and available
                 videos_to_use = [v for v in selected_videos if v in available_videos]
 
-                # If no match, use all available videos
                 if not videos_to_use:
                     videos_to_use = available_videos
                     print(f"[WARN] No matching videos found, using all {len(videos_to_use)} available")
@@ -170,9 +165,6 @@ class BAistPP(Dataset):
             valid_indices = sorted(set(blur_indices) & set(sharp_indices))
             print(f"[DEBUG] Valid indices: {len(valid_indices)}")
 
-            # if len(valid_indices) < 3:
-            #     print(f"[DEBUG] SKIP - not enough frames")
-            #     continue
 
             count = 0
             for i in range(1, len(valid_indices) - 1):
@@ -252,7 +244,6 @@ class BAistPP(Dataset):
 
             h, w, _ = tensor['inp'][0].shape
 
-            # skip inp_bbox since GoPro doesn't have annotations
             tensor['inp_bbox'] = []
 
             # load and resize gt images
@@ -355,21 +346,18 @@ class BAistPP(Dataset):
         num_gts = len(tensor['gt']) // len(tensor['inp'])
         for i, inp_img in enumerate(tensor['inp']):
             if self.use_trend:
-                # a row of images, including a input blurry image, trend guidance and corresponding gt sharp image sequence
                 imgs.append(
                     np.concatenate([inp_img,
                                     trend_plus_vis(tensor['trend'][i]),
                                     *tensor['gt'][i * num_gts:(i + 1) * num_gts]], axis=1)
                 )
             elif self.use_flow:
-                # a row of images, including a input blurry image, optical flow and corresponding gt sharp image sequence
                 imgs.append(
                     np.concatenate([inp_img,
                                     flow_to_image(tensor['flow'][i]),
                                     *tensor['gt'][i * num_gts:(i + 1) * num_gts]], axis=1)
                 )
             else:
-                # a row of images, including a input blurry image, and corresponding gt sharp image sequence
                 imgs.append(
                     np.concatenate([inp_img,
                                     *tensor['gt'][i * num_gts:(i + 1) * num_gts]], axis=1)
@@ -457,7 +445,6 @@ class GenBlur(Dataset):
                 sample['inp'], sample['gt'], sample['trend'], sample['flow'] = [], [], [], []
 
                 for i in range(frame - num_past, frame + num_fut + 1):
-                    # collect path of inputdataset.py
                     inp_path = join(inp_dir_path, inp_fmt.format(i))
                     sample['inp'].append(inp_path)
                     # collect path of gts
@@ -529,7 +516,6 @@ class GenBlur(Dataset):
                 tensor['trend'] = []
                 for trend_path in sample['trend']:
                     trend = np.load(trend_path)
-                    # recover the size of the trend as input image
                     trend = cv2.resize(trend, (w, h), interpolation=cv2.INTER_NEAREST)
                     tensor['trend'].append(trend)
             if self.use_flow:
@@ -617,7 +603,6 @@ class GenBlur(Dataset):
             tensor = self.load_sample(sample)
             if self.check_trend:
                 tensor = self.check_trend_ratio(tensor)
-        # tensor = self.check_trend_ratio(tensor, verbose=True)
         tensor = self.replay_image_aug(tensor, self.img_transform)
         tensor = self.replay_video_aug(tensor, self.vid_transform)
         tensor['inp'] = torch.from_numpy(np.stack(tensor['inp'], axis=0).transpose((0, 3, 1, 2))).float()
@@ -645,21 +630,18 @@ class GenBlur(Dataset):
         num_gts = len(tensor['gt']) // len(tensor['inp'])
         for i, inp_img in enumerate(tensor['inp']):
             if self.use_trend:
-                # a row of images, including a input blurry image, trend guidance and corresponding gt sharp image sequence
                 imgs.append(
                     np.concatenate([inp_img,
                                     trend_plus_vis(tensor['trend'][i]),
                                     *tensor['gt'][i * num_gts:(i + 1) * num_gts]], axis=1)
                 )
             elif self.use_flow:
-                # a row of images, including a input blurry image, optical flow and corresponding gt sharp image sequence
                 imgs.append(
                     np.concatenate([inp_img,
                                     flow_to_image(tensor['flow'][i]),
                                     *tensor['gt'][i * num_gts:(i + 1) * num_gts]], axis=1)
                 )
             else:
-                # a row of images, including a input blurry image, and corresponding gt sharp image sequence
                 imgs.append(
                     np.concatenate([inp_img,
                                     *tensor['gt'][i * num_gts:(i + 1) * num_gts]], axis=1)
@@ -673,7 +655,6 @@ class GenBlur(Dataset):
 
 
 if __name__ == '__main__':
-    # test code for BAistPP
     os.chdir('..')
     use_trend = False
     use_flow = True
