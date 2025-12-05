@@ -218,10 +218,6 @@ def main():
 
     # Training model
     validation(local_rank=args.local_rank, d_configs=d_configs, p_configs=p_configs, num_sampling=num_sampling, logger=logger)
-
-    # Tear down the process group
-    # dist.destroy_process_group()
-    # if torch.cuda.device_count() > 1:
     dist.destroy_process_group()
 
 
