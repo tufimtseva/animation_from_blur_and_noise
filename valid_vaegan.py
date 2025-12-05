@@ -18,6 +18,7 @@ from tqdm import tqdm
 from restormer_arch import Restormer
 import os
 
+BDDataset = None
 loss_fn_alex = lpips.LPIPS(net='alex').to('cuda:0')
 
 SAVE_DIR = "saved_output"
@@ -31,7 +32,7 @@ def init_seeds(seed=0):
     torch.cuda.manual_seed_all(seed)
 
 
-def validation(local_rank, d_configs, p_configs):
+def validation(local_rank, d_configs, p_configs, num_sampling, logger):
     # Preparation and backup
     torch.backends.cudnn.benchmark = True
 
@@ -41,12 +42,24 @@ def validation(local_rank, d_configs, p_configs):
 
     # dataset init
     dataset_args = d_configs['dataset_args']
-    valid_dataset = BDDataset(set_type='valid', **dataset_args)
-    valid_loader = DataLoader(valid_dataset,
-                              batch_size=1,
-                              num_workers=d_configs['num_workers'],
-                              pin_memory=True)
-    evaluate(d_model, p_model, valid_loader, local_rank)
+    # --- MODIFIED: Added Loop for Noise Levels ---
+    # Iterating through 0 to 50
+    for noise_level in [0, 5, 10, 20, 30, 40, 50]:
+        # Override dataset args to inject noise
+        dataset_args_override = dataset_args.copy()
+        dataset_args_override['noisy'] = (noise_level > 0)
+        dataset_args_override['noise_level'] = noise_level
+
+        # Re-initialize dataset with specific noise level
+        valid_dataset = BDDataset(set_type='valid', **dataset_args_override)
+        valid_loader = DataLoader(valid_dataset,
+                                  batch_size=1,
+                                  num_workers=d_configs['num_workers'],
+                                  pin_memory=True)
+
+        # Pass sigma (noise_level) to evaluate for logging
+        evaluate(d_model, p_model, valid_loader, local_rank, num_sampling, logger, sigma=noise_level)
+    logger.close()
 
 def validation_restormer(local_rank, d_configs, p_configs, num_sampling, logger):
     torch.backends.cudnn.benchmark = True
@@ -114,7 +127,7 @@ def validation_restormer(local_rank, d_configs, p_configs, num_sampling, logger)
     logger.close()
 
 @torch.no_grad()
-def evaluate(d_model, p_model, valid_loader, local_rank):
+def evaluate(d_model, p_model, valid_loader, local_rank, num_sampling, logger, sigma):
     # Preparation
     torch.cuda.empty_cache()
     device = torch.device("cuda", local_rank)
@@ -127,7 +140,7 @@ def evaluate(d_model, p_model, valid_loader, local_rank):
     time_stamp = time.time()
 
     # One epoch validation
-    for i, tensor in enumerate(tqdm(valid_loader, total=len(valid_loader))):
+    for i, tensor in enumerate(tqdm(valid_loader, total=len(valid_loader), desc=f"Testing Sigma={sigma}")):
         tensor['inp'] = tensor['inp'].to(device)  # (b, 1, 3, h, w)
         tensor['trend'] = torch.zeros_like(tensor['inp'])[:, :, :2]
         tensor['gt'] = tensor['gt'].to(device)  # (b, num_gts, 3, h, w)
@@ -188,15 +201,15 @@ def evaluate(d_model, p_model, valid_loader, local_rank):
 
     # Ending of validation
     eval_time_interval = time.time() - time_stamp
+    # --- MODIFIED: Logger includes Sigma prefix ---
     msg = 'eval time: {} sec, psnr: {:.5f}, ssim: {:.5f}, lpips: {:.4f}'.format(
         eval_time_interval, psnr_meter.avg, ssim_meter.avg, lpips_meter.avg
     )
-    logger(msg, prefix='[valid]')
+    logger(msg, prefix=f'[valid σ={sigma}]')
     msg = 'eval time: {:.4f} sec, psnr: {:.4f}, ssim: {:.4f}, lpips: {:.4f}'.format(
         eval_time_interval, psnr_meter_better.avg, ssim_meter_better.avg, lpips_meter_better.avg
     )
-    logger(msg, prefix='[valid max.]')
-    logger.close()
+    logger(msg, prefix=f'[valid max. σ={sigma}]')
 
 @torch.no_grad()
 def evaluate_restormer(d_model, p_model, valid_loader, local_rank, num_sampling, logger, sigma, denoiser):
@@ -365,12 +378,14 @@ if __name__ == '__main__':
         if 'b-aist++' in root_dir:
             is_gen_blur = False
     if is_gen_blur:
-        from data.dataset import GenBlur as BDDataset
+        from data.dataset import GenBlur
 
+        BDDataset = GenBlur
         d_configs['dataset_args']['aug_args']['valid']['image'] = {}
     else:
-        from data.dataset import BAistPP as BDDataset
+        from data.dataset import BAistPP
 
+        BDDataset = BAistPP
         d_configs['dataset_args']['aug_args']['valid']['image'] = {
             'NearBBoxResizedSafeCrop': {'max_ratio': 0, 'height': 192, 'width': 160}
         }
