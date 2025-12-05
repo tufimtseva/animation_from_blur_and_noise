@@ -154,14 +154,13 @@ class MBD:
             self.decomposer_s1 = NoiseModulatedDecomposer(base_decomposer_s1, feature_channels)
             self.decomposer_s2 = NoiseModulatedDecomposer(base_decomposer_s2, feature_channels)
 
-            print(f"[MBD] ✓ Noise-aware FiLM modulation ENABLED (feature_channels={feature_channels})")
+            print(f"[MBD] Noise-aware FiLM modulation ENABLED (feature_channels={feature_channels})")
         else:
             self.decomposer_s1 = base_decomposer_s1
             self.decomposer_s2 = base_decomposer_s2
             self.noise_estimator = None
             print("[MBD] Noise-aware feature modulation DISABLED")
 
-        # Replace BN as SyncBN
         self.decomposer_s1 = nn.SyncBatchNorm.convert_sync_batchnorm(self.decomposer_s1)
         self.decomposer_s2 = nn.SyncBatchNorm.convert_sync_batchnorm(self.decomposer_s2)
         if self.use_noise_aware:
