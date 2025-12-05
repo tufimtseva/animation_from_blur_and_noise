@@ -6,8 +6,6 @@ https://github.com/yenchenlin/nerf-pytorch
 import torch
 import torch.nn as nn
 
-
-# Positional encoding (section 5.1)
 class Embedder:
     def __init__(self, **kwargs):
         self.kwargs = kwargs
