@@ -5,14 +5,11 @@
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-from pdb import set_trace as stx
 import numbers
 
 from einops import rearrange
 
-##########################################################################
 ## Layer Norm
-
 def to_3d(x):
     return rearrange(x, 'b c h w -> b (h w) c')
 
@@ -67,7 +64,6 @@ class LayerNorm(nn.Module):
         return to_4d(self.body(to_3d(x)), h, w)
 
 
-##########################################################################
 ## Gated-Dconv Feed-Forward Network (GDFN)
 class FeedForward(nn.Module):
     def __init__(self, dim, ffn_expansion_factor, bias):
@@ -88,7 +84,6 @@ class FeedForward(nn.Module):
         x = self.project_out(x)
         return x
 
-##########################################################################
 ## Multi-DConv Head Transposed Self-Attention (MDTA)
 class Attention(nn.Module):
     def __init__(self, dim, num_heads, bias):
@@ -125,9 +120,6 @@ class Attention(nn.Module):
         out = self.project_out(out)
         return out
 
-
-
-##########################################################################
 class TransformerBlock(nn.Module):
     def __init__(self, dim, num_heads, ffn_expansion_factor, bias, LayerNorm_type):
         super(TransformerBlock, self).__init__()
@@ -143,9 +135,6 @@ class TransformerBlock(nn.Module):
 
         return x
 
-
-
-##########################################################################
 ## Overlapped image patch embedding with 3x3 Conv
 class OverlapPatchEmbed(nn.Module):
     def __init__(self, in_c=3, embed_dim=48, bias=False):
@@ -158,9 +147,6 @@ class OverlapPatchEmbed(nn.Module):
 
         return x
 
-
-
-##########################################################################
 ## Resizing modules
 class Downsample(nn.Module):
     def __init__(self, n_feat):
@@ -182,8 +168,7 @@ class Upsample(nn.Module):
     def forward(self, x):
         return self.body(x)
 
-##########################################################################
-##---------- Restormer -----------------------
+#---------- Restormer -----------------------
 class Restormer(nn.Module):
     def __init__(self, 
         inp_channels=3, 
@@ -194,8 +179,8 @@ class Restormer(nn.Module):
         heads = [1,2,4,8],
         ffn_expansion_factor = 2.66,
         bias = False,
-        LayerNorm_type = 'WithBias',   ## Other option 'BiasFree'
-        dual_pixel_task = False        ## True for dual-pixel defocus deblurring only. Also set inp_channels=6
+        LayerNorm_type = 'WithBias',
+        dual_pixel_task = False
     ):
 
         super(Restormer, self).__init__()
@@ -232,7 +217,6 @@ class Restormer(nn.Module):
         self.dual_pixel_task = dual_pixel_task
         if self.dual_pixel_task:
             self.skip_conv = nn.Conv2d(dim, int(dim*2**1), kernel_size=1, bias=bias)
-        ###########################
             
         self.output = nn.Conv2d(int(dim*2**1), out_channels, kernel_size=3, stride=1, padding=1, bias=bias)
 
@@ -270,7 +254,6 @@ class Restormer(nn.Module):
         if self.dual_pixel_task:
             out_dec_level1 = out_dec_level1 + self.skip_conv(inp_enc_level1)
             out_dec_level1 = self.output(out_dec_level1)
-        ###########################
         else:
             out_dec_level1 = self.output(out_dec_level1) + inp_img
 

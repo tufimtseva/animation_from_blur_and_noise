@@ -1,6 +1,5 @@
 # Flow visualization code used from https://github.com/tomrunia/OpticalFlow_Visualization
 
-
 # MIT License
 #
 # Copyright (c) 2018 Tom Runia

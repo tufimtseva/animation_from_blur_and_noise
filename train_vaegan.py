@@ -102,9 +102,9 @@ def train(local_rank, configs, log_dir):
                     logger(msg, prefix='[train]')
 
             if (rank == 0) and (step % 500 == 0):
-                inp_img = out_tensor['inp_img']  # inp_img shape (b, c, h, w)
-                pred_trends = out_tensor['pred_trends']  # pred_imgs shape (b, 2, h, 2*w)
-                gt_trend = out_tensor['gt_trend']  # gt_imgs shape (b, 2, h, w)
+                inp_img = out_tensor['inp_img']
+                pred_trends = out_tensor['pred_trends']
+                gt_trend = out_tensor['gt_trend']
 
                 # Prepare recorded results
                 inp_img = inp_img.permute(0, 2, 3, 1).cpu().detach().numpy().astype(np.uint8)

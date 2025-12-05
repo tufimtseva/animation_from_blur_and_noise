@@ -1,9 +1,10 @@
+import os
+import time
 import yaml
 import random
 import torch
 import torchmetrics
 import lpips
-import time
 import numpy as np
 import torch.distributed as dist
 import torch.nn.functional as F
@@ -17,17 +18,15 @@ from model.bicyclegan.global_model import GuidePredictor as GP
 from tqdm import tqdm
 from torch.distributed.elastic.multiprocessing.errors import record
 from data.dataset import BAistPP as BDDataset
-
-loss_fn_alex = lpips.LPIPS(net='alex').to('cuda:0')
 import torchvision.utils as vutils
 
-import os
-
+# Constants
 SAVE_DIR = "saved_output"
 os.makedirs(SAVE_DIR, exist_ok=True)
-
+loss_fn_alex = lpips.LPIPS(net='alex').to('cuda:0')
 
 def init_seeds(seed=0):
+    """Initialize random seeds for reproducibility."""
     random.seed(seed)
     np.random.seed(seed)
     torch.manual_seed(seed)
@@ -35,13 +34,18 @@ def init_seeds(seed=0):
 
 
 def validation(local_rank, d_configs, p_configs, num_sampling, logger):
+    """
+    Orchestrates the validation process across different noise levels.
+    """
     torch.backends.cudnn.benchmark = True
 
+    # Initialize Decomposer (MBD) and Predictor (GP) models
     d_model = MBD(local_rank=local_rank, configs=d_configs)
     p_model = GP(local_rank=local_rank, configs=p_configs)
 
     dataset_args = d_configs['dataset_args']
 
+    # Test robustness against increasing noise levels
     for noise_level in [0, 5, 10, 20]:
         print(f"[INFO] Testing with noise_level={noise_level}")
 
@@ -62,18 +66,25 @@ def validation(local_rank, d_configs, p_configs, num_sampling, logger):
 
 @torch.no_grad()
 def evaluate(d_model, p_model, valid_loader, local_rank, num_sampling, logger, sigma):
+    """
+    Evaluates the model on a specific dataset configuration.
+    Calculates PSNR, SSIM, and LPIPS metrics.
+    """
     torch.cuda.empty_cache()
     device = torch.device("cuda", local_rank)
     psnr_meter = AverageMeter()
     ssim_meter = AverageMeter()
     lpips_meter = AverageMeter()
+
+    # "Better" meters track the best performance between forward/reverse consistency
     psnr_meter_better = AverageMeter()
     ssim_meter_better = AverageMeter()
     lpips_meter_better = AverageMeter()
-    time_stamp = time.time()
 
+    time_stamp = time.time()
     NUM_SEQUENCES_TO_SAVE = 5
 
+    # Directory setup for visual results
     noise_dir = join(SAVE_DIR, f"noise_sigma_{sigma}")
     os.makedirs(noise_dir, exist_ok=True)
 
@@ -83,6 +94,7 @@ def evaluate(d_model, p_model, valid_loader, local_rank, num_sampling, logger, s
         tensor['gt'] = tensor['gt'].to(device)
         b, num_gts, c, h, w = tensor['gt'].shape
 
+        # Save input reference images for the first few sequences
         if i < NUM_SEQUENCES_TO_SAVE:
             seq_dir = join(noise_dir, f"sequence_{i}")
             os.makedirs(seq_dir, exist_ok=True)
@@ -179,15 +191,18 @@ def main():
     parser.add_argument('--num_iters', type=int, default=1, help='number of iters')
     parser.add_argument('-ns', '--num_sampling', type=int, default=1, help='number of sampling times')
     parser.add_argument('--verbose', action='store_true', help='whether to print out logs')
+
     args = parser.parse_args()
     num_sampling = args.num_sampling
 
+    # Load Decomposer Configs
     decomposer_config = join(args.decomposer_resume_dir, 'cfg.yaml')
     with open(decomposer_config) as f:
         d_configs = yaml.full_load(f)
     d_configs['resume_dir'] = args.decomposer_resume_dir
     d_configs['num_iterations'] = args.num_iters
 
+    # Load Predictor Configs
     predictor_config = join(args.predictor_resume_dir, 'cfg.yaml')
     with open(predictor_config, 'rt', encoding='utf8') as f:
         p_configs = yaml.full_load(f)
@@ -196,6 +211,7 @@ def main():
     p_configs['bicyclegan_args']['epoch'] = 'latest'
     p_configs['bicyclegan_args']['no_encode'] = False
 
+    # Adjust dataset configs based on path (B-AIST++ vs others)
     is_gen_blur = True
     for root_dir in d_configs['dataset_args']['root_dir']:
         if 'b-aist++' in root_dir:

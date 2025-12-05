@@ -2,11 +2,11 @@
 #SBATCH --error=slurm-%j.err
 #SBATCH --job-name=anim_eval
 #SBATCH --partition=gpunodes
-#SBATCH --gres=gpu:1           # request 1 GPU
+#SBATCH --gres=gpu:1
 #SBATCH --cpus-per-task=4
 #SBATCH --mem=33G
 #SBATCH --time=06:00:00
-#SBATCH --output=slurm-%j.out  # log file
+#SBATCH --output=slurm-%j.out
 #SBATCH --exclude=gpunode16
 
 # Load conda

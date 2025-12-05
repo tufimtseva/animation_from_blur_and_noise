@@ -15,11 +15,9 @@ class Compose:
     Compose a series of image augmentations
     """
     def __init__(self, transforms):
-        # assert isinstance(transforms, list) and len(transforms) > 0
         self.tranforms = transforms
 
     def __call__(self, image, bbox, flow=False, trend=False, replay_args=None):
-        # Copy the list
         replay_args = list(replay_args) if isinstance(replay_args, list) else None
         out = {'image': image, 'bbox': bbox}
         replay_args_record = []
@@ -70,12 +68,10 @@ class NearBBoxResizedSafeCrop:
         else:
             image = cv2.resize(image, (self.width, self.height), interpolation=cv2.INTER_AREA)
 
-        # Adjust the values based on the size if it is optical flow
         if flow:
             image[:, :, 0] *= self.width / float(x_max - x_min)
             image[:, :, 1] *= self.height / float(y_max - y_min)
 
-        # args: arguments for replaying this augmentation
         return {'image': image, 'bbox': None}, args
 
 
@@ -152,7 +148,6 @@ class Rot90:
         image = torch.from_numpy(image).permute(2, 0, 1).unsqueeze(dim=0)  # (1, c, h, w)
         if trend or flow:
             image = flow_rot90(image, n=n)
-            # image = trend_rot90(image, n=n)
         else:
             image = torch.rot90(image, k=n, dims=[-2, -1])
         image = image.squeeze(dim=0).permute(1, 2, 0).numpy().astype(np.float)
@@ -169,7 +164,6 @@ class Flip:
     '''
 
     def __call__(self, image, bbox, flow=False, trend=False, args=None):
-        # Prepare args
         if args is None:
             args = {}
             args['flip_flag'] = random.randint(0, 2)
@@ -182,10 +176,8 @@ class Flip:
                 pass
             elif flip_flag == 1:
                 image = flow_lr_flip(image)
-                # image = trend_lr_flip(image)
             elif flip_flag == 2:
                 image = flow_ud_flip(image)
-                # image = trend_ud_flip(image)
             else:
                 raise NotImplementedError('flip_flag: {}'.format(flip_flag))
         else:
@@ -227,7 +219,6 @@ class ComposeV:
     """
 
     def __init__(self, transforms):
-        # assert isinstance(transforms, list) and len(transforms) > 0
         self.tranforms = transforms
 
     def __call__(self, images, flow=False, trend=False, replay_args=None):
@@ -265,7 +256,6 @@ class Reverse:
                 for i, image in enumerate(images):
                     image = torch.from_numpy(image).permute(2, 0, 1).unsqueeze(dim=0)  # (1, c, h, w)
                     image = flow_diagonal_reverse(image)
-                    # image = trend_diagonal_reverse(image)
                     images[i] = image.squeeze(dim=0).permute(1, 2, 0).numpy().astype(np.float)
             else:
                 images = images[::-1]

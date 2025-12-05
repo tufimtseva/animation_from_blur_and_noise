@@ -119,7 +119,7 @@ class MBD:
         if 'perc_ratio' in configs:
             self.perc_ratio = configs['perc_ratio']
 
-        # NEW: Noise-aware training flag
+        # Noise-aware training flag
         self.use_noise_aware = True
         if 'use_noise_aware' in configs:
             self.use_noise_aware = configs['use_noise_aware']
@@ -142,7 +142,7 @@ class MBD:
         base_decomposer_s1 = Decomposer(**configs['decomposer_s1_args'])
         base_decomposer_s2 = Decomposer(**configs['decomposer_s2_args'])
 
-        # NEW: Wrap decomposers with noise-aware FiLM modulation
+        # Wrap decomposers with noise-aware FiLM modulation
         if self.use_noise_aware:
             self.noise_estimator = NoiseEstimationBranch()
             self.noise_estimator.to(device=self.device)
@@ -197,7 +197,7 @@ class MBD:
         if self.perc_ratio > 0:
             self.vgg = Vgg19().to(self.device)
 
-        # NEW: Loss weight for noise estimation
+        # Loss weight for noise estimation
         self.noise_loss_weight = 0.1
         if 'noise_loss_weight' in configs:
             self.noise_loss_weight = configs['noise_loss_weight']
@@ -278,7 +278,7 @@ class MBD:
         out_tensor = {}
         blur_img, sharp_imgs, trend_img = inp_tensor['inp'], inp_tensor['gt'], inp_tensor['trend']
 
-        # NEW: Get noise level (either ground truth or estimated)
+        # Get noise level (either ground truth or estimated)
         gt_noise_level = inp_tensor.get('noise_level', None)
 
         b, n, c, h, w = blur_img.shape
@@ -288,7 +288,7 @@ class MBD:
         blur_img = blur_img / self.val_range
         sharp_imgs = sharp_imgs / self.val_range
 
-        # NEW: Estimate noise level
+        # Estimate noise level
         estimated_noise_level = None
         noise_estimation_loss = torch.tensor(0.0).to(self.device)
 
@@ -349,7 +349,7 @@ class MBD:
                 for i in range(len(x_vgg)):
                     loss += self.perc_ratio * torch.abs(x_vgg[i] - y_vgg[i].detach()).mean()
 
-        # NEW: Add noise estimation loss
+        # Add noise estimation loss
         if self.use_noise_aware and gt_noise_level is not None:
             loss += self.noise_loss_weight * noise_estimation_loss
             out_tensor['noise_est_loss'] = noise_estimation_loss.detach()
@@ -377,7 +377,7 @@ class MBD:
         :param noise_level: estimated noise level (b, 1)
         :return: sharp image sequence (b, num_gts, c, h, w)
         """
-        # NEW: Set noise level for FiLM modulation
+        # Set noise level for FiLM modulation
         if self.use_noise_aware and hasattr(self.decomposer_s1, 'module'):
             # DDP wrapped
             self.decomposer_s1.module.set_noise_level(noise_level)
@@ -408,7 +408,7 @@ class MBD:
         :param noise_level: estimated noise level (b, 1)
         :return: predicted images after refinement (b, num_gts, c, h, w)
         """
-        # NEW: Set noise level for FiLM modulation
+        # Set noise level for FiLM modulation
         if self.use_noise_aware and hasattr(self.decomposer_s2, 'module'):
             # DDP wrapped
             self.decomposer_s2.module.set_noise_level(noise_level)
@@ -458,7 +458,7 @@ class MBD:
         else:
             raise NotImplementedError
 
-        # NEW: Estimate noise level during inference
+        # Estimate noise level during inference
         estimated_noise_level = None
         if self.use_noise_aware:
             estimated_noise_level = self.noise_estimator(blur_img)

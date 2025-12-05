@@ -60,10 +60,9 @@ def _gen_flow(img0, img1):
 
 
 def gen_flow(img_ref, img_tgt):
-    flow = _gen_flow(img_tgt, img_ref)  # backward flow
+    flow = _gen_flow(img_tgt, img_ref)
     flow = flow * (-1.)
     size = (int(flow_ratio * flow.shape[1]), int(flow_ratio * flow.shape[0]))
-    # ! resizing flow needs to time ratio
     flow = flow_ratio * cv2.resize(flow, size, interpolation=cv2.INTER_AREA)
     trend_x = flow[:, :, 0::2]
     trend_y = flow[:, :, 1::2]
@@ -101,18 +100,18 @@ def evaluate(model, valid_loader, local_rank):
 
     # One epoch validation
     for i, tensor in enumerate(tqdm(valid_loader, total=len(valid_loader))):
-        tensor['inp'] = tensor['inp'].to(device)  # (b, 1, 3, h, w)
+        tensor['inp'] = tensor['inp'].to(device)
 
         img_ref = tensor['inp'][:, 0]
         img_tgt = tensor['inp'][:, 1]
         trend = gen_flow(img_ref, img_tgt)
-        tensor['trend'] = trend.unsqueeze(dim=1).to(device)  # (b, 1, 2, h, w)
-        tensor['inp'] = img_tgt.unsqueeze(dim=1).to(device)  # (b, 1, 3, h, w)
-        tensor['gt'] = tensor['gt'][:, 7:].to(device)  # (b, num_gts, 3, h, w)
+        tensor['trend'] = trend.unsqueeze(dim=1).to(device)
+        tensor['inp'] = img_tgt.unsqueeze(dim=1).to(device)
+        tensor['gt'] = tensor['gt'][:, 7:].to(device)
 
         out_tensor = model.update(inp_tensor=tensor, training=False)
-        pred_imgs = out_tensor['pred_imgs']  # pred_imgs shape (b, num_gts, 3, h, w)
-        gt_imgs = out_tensor['gt_imgs']  # gt_imgs shape (b, num_gts, 3, h, w)
+        pred_imgs = out_tensor['pred_imgs']
+        gt_imgs = out_tensor['gt_imgs']
         loss = out_tensor['loss']
 
         # Record loss and metrics
@@ -132,7 +131,6 @@ def evaluate(model, valid_loader, local_rank):
         ssim_meter.update(ssim_val, num_gts * b)
         lpips_meter.update(lpips_val.mean().detach(), num_gts * b)
         loss_meter.update(loss.item(), b)
-        # print('{}/{}'.format(i + 1, len(valid_loader)), psnr_meter.avg, ssim_meter.avg, lpips_meter.avg)
 
     # Ending of validation
     eval_time_interval = time.time() - time_stamp

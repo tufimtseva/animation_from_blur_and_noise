@@ -128,18 +128,17 @@ def train(local_rank, configs, log_dir):
                 b, _, c, h, w = tensor['inp'].shape
                 tensor['trend'] = torch.zeros(b, 1, 2, h, w, device=device)
 
-            # === NEW: Add noise augmentation ===
+            # Add noise augmentation
             b = tensor['inp'].size(0)
             if random.random() < noise_aug_prob:
-                # Squeeze from (b, 1, 3, h, w) to (b, 3, h, w) for noise function
-                # Note: inp is 0-255 range, need to normalize first
+                # normalizing as inp is in 0-255 range
                 inp_squeezed = tensor['inp'].squeeze(1) / 255.0  # Normalize to [0, 1]
                 noisy_inp, noise_levels = add_gaussian_noise(
                     inp_squeezed,
                     noise_prob=1.0,  # All samples in this batch get noise
                     sigma_range=noise_sigma_range
                 )
-                tensor['inp'] = (noisy_inp * 255.0).unsqueeze(1)  # Back to (b, 1, 3, h, w) and 0-255
+                tensor['inp'] = (noisy_inp * 255.0).unsqueeze(1)
                 tensor['noise_level'] = noise_levels.to(device)
             else:
                 # No noise - set noise level to 0
@@ -161,7 +160,7 @@ def train(local_rank, configs, log_dir):
                     writer.add_scalar('learning_rate', model.get_lr(), step)
                     writer.add_scalar('train/loss', loss.item(), step)
 
-                    # NEW: Log noise-related metrics
+                    # Log noise-related metrics
                     avg_noise = tensor['noise_level'].mean().item()
                     writer.add_scalar('train/noise_level', avg_noise, step)
                     if 'noise_est_loss' in out_tensor:
@@ -178,10 +177,10 @@ def train(local_rank, configs, log_dir):
                     logger(msg, prefix='[train]')
 
             if (rank == 0) and (step % 500 == 0):
-                inp_img = out_tensor['inp_img']  # inp_img shape (b, c, h, w)
-                trend_img = out_tensor['trend_img']  # trend_img shape (b, 2, h, w)
-                pred_imgs = out_tensor['pred_imgs']  # pred_imgs shape (b, num_gts, 3, h, w)
-                gt_imgs = out_tensor['gt_imgs']  # gt_imgs shape (b, num_gts, 3, h, w)
+                inp_img = out_tensor['inp_img']
+                trend_img = out_tensor['trend_img']
+                pred_imgs = out_tensor['pred_imgs']
+                gt_imgs = out_tensor['gt_imgs']
 
                 # Prepare recorded results
                 inp_img = inp_img.permute(0, 2, 3, 1).cpu().detach().numpy().astype(np.uint8)
@@ -227,13 +226,13 @@ def evaluate(model, valid_loader, num_eval, local_rank, writer):
     loss_meter_noisy = AverageMeter()
     psnr_meter_clean = AverageMeter()
     ssim_meter_clean = AverageMeter()
-    lpips_meter_clean = AverageMeter()  # NEW
+    lpips_meter_clean = AverageMeter()
     psnr_meter_noisy = AverageMeter()
     ssim_meter_noisy = AverageMeter()
-    lpips_meter_noisy = AverageMeter()  # NEW
+    lpips_meter_noisy = AverageMeter()
     time_stamp = time.time()
 
-    # NEW: Initialize LPIPS model (using AlexNet)
+    # Initialize LPIPS model (using AlexNet)
     lpips_model = lpips.LPIPS(net='alex').to(device)
 
     # One epoch validation
@@ -267,7 +266,7 @@ def evaluate(model, valid_loader, num_eval, local_rank, writer):
             gt_imgs.reshape(num_gts * b, c, h, w)
         )
 
-        # NEW: LPIPS for clean (expects values in [-1, 1] range)
+        # LPIPS for clean (expects values in [-1, 1] range)
         pred_normalized = (pred_imgs_clean.reshape(num_gts * b, c, h, w) / 255.0) * 2 - 1
         gt_normalized = (gt_imgs.reshape(num_gts * b, c, h, w) / 255.0) * 2 - 1
         lpips_clean = lpips_model(pred_normalized, gt_normalized).mean()
@@ -275,7 +274,7 @@ def evaluate(model, valid_loader, num_eval, local_rank, writer):
         loss_meter_clean.update(loss_clean.item(), b)
         psnr_meter_clean.update(psnr_clean, num_gts * b)
         ssim_meter_clean.update(ssim_clean, num_gts * b)
-        lpips_meter_clean.update(lpips_clean.item(), num_gts * b)  # NEW
+        lpips_meter_clean.update(lpips_clean.item(), num_gts * b)
 
         # === Test 2: Noisy images (fixed sigma=15) ===
         inp_squeezed = tensor['inp'].squeeze(1) / 255.0  # Normalize to [0, 1]
@@ -305,14 +304,14 @@ def evaluate(model, valid_loader, num_eval, local_rank, writer):
             gt_imgs.reshape(num_gts * b, c, h, w)
         )
 
-        # NEW: LPIPS for noisy
+        # LPIPS for noisy
         pred_noisy_normalized = (pred_imgs_noisy.reshape(num_gts * b, c, h, w) / 255.0) * 2 - 1
         lpips_noisy = lpips_model(pred_noisy_normalized, gt_normalized).mean()
 
         loss_meter_noisy.update(loss_noisy.item(), b)
         psnr_meter_noisy.update(psnr_noisy, num_gts * b)
         ssim_meter_noisy.update(ssim_noisy, num_gts * b)
-        lpips_meter_noisy.update(lpips_noisy.item(), num_gts * b)  # NEW
+        lpips_meter_noisy.update(lpips_noisy.item(), num_gts * b)
 
         # Record image results (from clean version)
         if rank == 0 and i == random_idx:
@@ -371,18 +370,16 @@ if __name__ == '__main__':
 
     # Import blur decomposition dataset
     from data.dataset import BAistPP as BDDataset
-    # DDP init
     dist.init_process_group(backend="nccl")
     torch.cuda.set_device(args.local_rank)
     rank = dist.get_rank()
     init_seeds(seed=rank)
 
-    # Logger init
     if rank == 0:
         logger = Logger(file_path=join(args.log_dir, 'log_{}.txt'.format(datetime.now().strftime('%Y_%m_%d_%H_%M_%S'))),
                         verbose=args.verbose)
 
-    # Training model
+    # Training the model
     train(local_rank=args.local_rank,
           configs=configs,
           log_dir=args.log_dir)
